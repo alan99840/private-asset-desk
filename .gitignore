@@ -1,0 +1,15 @@
+state/
+daily/
+briefs/
+raw/
+integration_checks/
+automation_status.json
+release.json
+latest.md
+__pycache__/
+*.pyc
+*.log
+.env
+*.pem
+*.key
+*.zip

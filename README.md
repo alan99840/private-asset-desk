@@ -1,2 +1,48 @@
-# private-asset-desk
-Authenticated private market dashboard and evidence-based asset research workflow. Read-only quotes, manual execution; source code only.
+# Private Asset Research Desk / V2.3
+
+个人美股研究与手动交易看板。行情只读，不连接真实账户、下单或改撤单接口。
+
+## 运行
+
+Python 3.11+，无第三方运行依赖。首次部署须配置自己的富途只读行情连接，不发布或复制任何授权凭据。
+
+```sh
+python3 bootstrap.py
+python3 server.py
+```
+
+浏览器打开 `http://127.0.0.1:8765`。首次在本机设置看板用户名及至少12字符密码；密码以scrypt散列保存，登录会话8小时，退出撤销会话。初始账户创建不允许通过远程代理进行。
+
+本地服务停止后可用 `python3 ensure_server.py` 检查并重启，登录会话需重新建立。它需要有工作目录权限的本地运行环境；电脑关机或休眠时不能采集。私人网络可用不代表看板后端已经运行。
+
+后台在已声明的交易窗口每60秒批量采集三大真实指数及观察股票。页面每15秒检查缓存，展示交易所时间戳及采集耗时。非正常盘的指数值为最近时段记录；不会标成实时开盘报价。缺权限、异常、陈旧数据不产生有效入场卡。
+
+## 私人远程访问
+
+服务绑定127.0.0.1。远程入口需完成身份服务的用户登录及HTTPS配置：
+
+- Tailscale Serve：电脑及手机登录同一私人tailnet，用Serve将localhost:8765提供给授权设备。后端同时校验Serve提供的 `Tailscale-User-Login`，仅允许指定的本人身份，并继续要求独立看板登录。不能用公开Funnel替代。文档 https://tailscale.com/docs/features/tailscale-serve
+
+在私人 `state/deployment.json` 设置实际Serve域名的 `allowed_hosts`、本人登录标识 `allowed_tailscale_login` 和真正核验后的 `remote_enabled`。Serve身份头只在绑定loopback的后端中信任；不能将此后端直接绑定公网或LAN。登录令牌仅由服务端生成，不能在网页JS中保存密钥或用静态密码页面代替后端验证。
+
+## 数据与研究
+
+`market.py`：批量真实指数报价，交易日验证，真实请求与接收时点，固定节奏不重叠。
+
+`context.py`：六段事件链、未来事实拦截、同事件去重、关联证据、指数新鲜度门槛。
+
+`evaluate.py`：V2.3对核心advisor的新增风险入口；已有持仓保护和退出不被新闻/指数缺失阻塞。
+
+`collect.py`、`rvol.py`：延续候选盘前扫描与同窗20交易日RVOL核验。原始采集不是新闻研究完成，也不等于候选已冻结；由已授权advisor流程完成核验和写入。
+
+`publish.py`：检查结构化晨报并写出看板、Markdown及每日存档。文本由advisor基于原发布方研究写入，不以词频或标题情绪替代判断。
+
+## 开源范围
+
+只发布程序、网页、文档和不含个人数据的示例规则。`export_source.py`以文件白名单导出，不读取运行数据。实际观察清单、持仓、晨报、原始行情、授权、密码散列与登录会话全部保留在私人服务。公开GitHub Pages不作为私人资产看板。
+
+公开仓库的资金字段是示例，不能代表维护者真实资产，也不应未经修改直接作为自己的交易预算。
+
+## 验证范围
+
+风险、未来数据、通知有效期、认证和陈旧数据使用合成边界检查；这些不是收益回测。该策略不承诺盈利，所有交易由用户核对当前券商报价和保护支持后手动提交。
