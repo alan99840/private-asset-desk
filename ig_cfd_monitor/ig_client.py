@@ -25,7 +25,7 @@ class NoRedirect(HTTPRedirectHandler):
 class IGClient:
     STREAM_TLS_CONFIGURED = False
     ROOTS = {'live':'https://api.ig.com/gateway/deal', 'demo':'https://demo-api.ig.com/gateway/deal'}
-    READ = re.compile(r'^/(accounts|positions|workingorders|watchlists(?:/[A-Za-z0-9_-]+)?|markets(?:/[A-Za-z0-9_.-]+)?|history/(?:activity|transactions)|session(?:/encryptionKey)?)$')
+    READ = re.compile(r'^/(accounts|positions|workingorders|watchlists(?:/[A-Za-z0-9_-]+)?|markets(?:/[A-Za-z0-9_.-]+)?|prices/[A-Za-z0-9_.-]+|history/(?:activity|transactions)|session(?:/encryptionKey)?)$')
 
     def __init__(self, credentials):
         self.credentials = credentials
