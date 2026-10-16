@@ -12,9 +12,9 @@ from runtime import Monitor,number,amount,now
 
 class TransportTests(unittest.TestCase):
  def test_no_dealing(self):
-  for method,path in [('POST','/positions/otc'),('DELETE','/positions/otc'),('PUT','/working-orders/otc/x'),('GET','https://evil.test/accounts'),('GET','//evil.test/accounts'),('GET','/../accounts'),('POST','/session?x=1')]:
+  for method,path in [('POST','/positions/otc'),('DELETE','/positions/otc'),('PUT','/workingorders/otc/x'),('POST','/workingorders/otc'),('DELETE','/workingorders/otc/x'),('GET','/working-orders'),('GET','https://evil.test/accounts'),('GET','//evil.test/accounts'),('GET','/../accounts'),('POST','/session?x=1')]:
    with self.assertRaises(IGError):IGClient.validate_path(method,path)
-  for method,path in [('POST','/session'),('PUT','/session'),('GET','/accounts'),('GET','/history/activity?from=x'),('GET','/positions'),('GET','/markets/IX.D.TEST.IP')]:IGClient.validate_path(method,path)
+  for method,path in [('POST','/session'),('PUT','/session'),('GET','/accounts'),('GET','/history/activity?from=x'),('GET','/positions'),('GET','/workingorders'),('GET','/markets/IX.D.TEST.IP')]:IGClient.validate_path(method,path)
  def test_numeric_unknown(self):
   self.assertIsNone(number('NaN'));self.assertIsNone(number('inf'));self.assertIsNone(amount('US$ 3'))
   self.assertEqual(amount('(HK$ 1,234.56)'),-1234.56)
