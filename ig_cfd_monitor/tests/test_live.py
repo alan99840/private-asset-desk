@@ -97,8 +97,9 @@ class ViewerAccessTests(unittest.TestCase):
    for method in ['GET','HEAD']:
     status,_,data=self.request(path,method)
     self.assertEqual(status,401);self.assertNotIn(b'private_test_value',data)
-  status,_,data=self.request('/')
+  status,headers,data=self.request('/')
   self.assertEqual(status,200);self.assertIn(b'type="password"',data);self.assertNotIn(b'private_test_value',data)
+  self.assertEqual(headers['Referrer-Policy'],'same-origin')
  def test_login_cookie_and_authorized_reads(self):
   status,h,_=self.login(Host='monitor.example',Origin='https://monitor.example')
   self.assertEqual(status,303);self.assertEqual(h['Location'],'/')
@@ -127,6 +128,7 @@ class ViewerAccessTests(unittest.TestCase):
   self.assertEqual(s.ACCESS_FILE.stat().st_mode & 0o777,0o600)
  def test_login_origin_and_rate_limit(self):
   self.assertEqual(self.login(Host='monitor.example',Origin='https://other.example')[0],403)
+  self.assertEqual(self.login(Host='monitor.example',Origin='null')[0],403)
   import collections,time
   with patch.object(self.server_module,'LOGIN_FAILURES',collections.deque([time.monotonic()]*10)):
    self.assertEqual(self.login('wrong')[0],429)
