@@ -119,7 +119,7 @@ class Monitor:
         if not a:raise IGError('ig.selected.account.missing')
         self.account(a)
         positions=self.client.request('GET','/positions',2).get('positions')
-        orders=self.client.request('GET','/working-orders',2).get('workingOrders')
+        orders=self.client.request('GET','/workingorders',2).get('workingOrders')
         if not isinstance(positions,list) or not isinstance(orders,list):raise IGError('ig.invalid.position.response')
         with self.lock:
             self.state['positions']=positions;self.state['orders']=orders;self.state['positions_at']=now()
