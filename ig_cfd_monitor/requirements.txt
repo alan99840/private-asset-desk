@@ -1,0 +1,4 @@
+# IG's documented compatible Python SDK; verify with the active IG server.
+lightstreamer-client-lib==1.0.3
+cryptography>=43,<47
+certifi>=2025.1.31
