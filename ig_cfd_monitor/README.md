@@ -20,7 +20,18 @@ Mac 上的服务绑定 loopback。只把 **8786** 交给 Funnel：
 /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --bg --https=8443 --yes http://127.0.0.1:8786
 ```
 
-分享命令返回的 HTTPS 网址。查看者不需要加入 tailnet；所有拿到链接的人可以查看完整余额、持仓和逐笔记录。`noindex` 只是搜索引擎提示，不是访问控制。**不要发布 8787 配置端口、state 目录或文件服务。**
+分享命令返回的 HTTPS 网址。查看者不需要加入 tailnet；输入共享访问密码后可查看完整余额、持仓和逐笔记录。首页、账户 API、CSV 导出及 SSE 实时推送都需要登录；未配置访问密码时拒绝提供账户数据。
+
+安装后，在运行目录设置或更改访问密码（终端输入不回显）：
+
+```sh
+cd "$HOME/Library/Application Support/HarbourCFD"
+.venv/bin/python server.py --set-password
+```
+
+访问密码只保存为带随机盐的 PBKDF2 摘要，位于权限 0600 的 `state/viewer_access.json`；该文件不上传 GitHub。共享网页通过 HTTPS 使用 HttpOnly、Secure、SameSite Cookie，登录有效期为 12 小时；更改密码会使旧登录凭证失效，已打开的推送流最多再存续 55 秒。连续错误登录受到频率限制。访问密码与 IG 登录密码相互独立。
+
+`noindex` 只是搜索引擎提示。**不要发布 8787 配置端口、state 目录或文件服务。**
 
 旧看板的 HTTPS 443 / 私人 Serve 可以继续保留。仅关闭本项目入口：
 
