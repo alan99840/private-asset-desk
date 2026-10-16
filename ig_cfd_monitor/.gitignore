@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+state/
+raw/
+logs/
+qa/
+*.db
+*.sqlite*
+.DS_Store
+.venv/
+backups/
+*.pid
