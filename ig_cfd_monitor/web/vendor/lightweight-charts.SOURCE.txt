@@ -1,0 +1,5 @@
+Lightweight Charts 5.2.1
+Official package: https://registry.npmjs.org/lightweight-charts/-/lightweight-charts-5.2.1.tgz
+Archive SHA256: 64310292298df4dd527494865e5d91d447f8bb397b68de3912c2a6465025ee5e
+NOTICE: https://raw.githubusercontent.com/tradingview/lightweight-charts/v5.2.1/NOTICE
+Documentation: https://tradingview.github.io/lightweight-charts/docs
