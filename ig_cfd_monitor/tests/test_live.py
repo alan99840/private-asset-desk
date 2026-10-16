@@ -66,4 +66,70 @@ class CollectorTests(unittest.TestCase):
     return {'transactions':[row,row] if params['type']=='DEPOSIT' else [],'metadata':{'pageData':{'totalPages':1}}}
   self.m.client=Fake();self.m.funding_sync();self.assertEqual(self.m.funding,100)
 
+class ViewerAccessTests(unittest.TestCase):
+ @classmethod
+ def setUpClass(cls):
+  import server, threading
+  cls.server_module=server;cls.temp=tempfile.TemporaryDirectory()
+  cls.path_patch=patch.object(server,'ACCESS_FILE',Path(cls.temp.name)/'viewer_access.json');cls.path_patch.start()
+  server.set_viewer_password('synthetic-viewer-password')
+  cls.config=server.access_config()
+  cls.monitor_patch=patch.object(server,'MONITOR');cls.monitor=cls.monitor_patch.start()
+  cls.monitor.project.return_value={'status':'connected','markets':[],'history':{},'private_test_value':123}
+  cls.monitor.ledger.return_value=[]
+  cls.httpd=server.ThreadingHTTPServer(('127.0.0.1',0),server.Handler)
+  cls.thread=threading.Thread(target=cls.httpd.serve_forever,daemon=True);cls.thread.start()
+ @classmethod
+ def tearDownClass(cls):
+  cls.httpd.shutdown();cls.httpd.server_close();cls.thread.join()
+  cls.monitor_patch.stop();cls.path_patch.stop();cls.temp.cleanup()
+ def request(self,path,method='GET',body=None,headers=None):
+  import http.client
+  c=http.client.HTTPConnection('127.0.0.1',self.httpd.server_port,timeout=3)
+  c.request(method,path,body=body,headers=headers or {})
+  r=c.getresponse();status=r.status;h=dict(r.getheaders());data=r.read();c.close()
+  return status,h,data
+ def login(self,password='synthetic-viewer-password',**headers):
+  from urllib.parse import urlencode
+  return self.request('/auth/login','POST',urlencode({'password':password}),{'Content-Type':'application/x-www-form-urlencoded',**headers})
+ def test_unauthed_data_and_export_are_blocked(self):
+  for path in ['/api/state','/api/ledger','/api/ledger.csv','/api/events']:
+   for method in ['GET','HEAD']:
+    status,_,data=self.request(path,method)
+    self.assertEqual(status,401);self.assertNotIn(b'private_test_value',data)
+  status,_,data=self.request('/')
+  self.assertEqual(status,200);self.assertIn(b'type="password"',data);self.assertNotIn(b'private_test_value',data)
+ def test_login_cookie_and_authorized_reads(self):
+  status,h,_=self.login(Host='monitor.example',Origin='https://monitor.example')
+  self.assertEqual(status,303);self.assertEqual(h['Location'],'/')
+  for flag in ['HttpOnly','Secure','SameSite=Strict']:self.assertIn(flag,h['Set-Cookie'])
+  cookie=h['Set-Cookie'].split(';')[0]
+  for path in ['/','/live.js','/api/state','/api/ledger','/api/ledger.csv']:
+   self.assertEqual(self.request(path,headers={'Cookie':cookie})[0],200)
+  self.assertIn(b'private_test_value',self.request('/api/state',headers={'Cookie':cookie})[2])
+ def test_stream_requires_valid_session(self):
+  import http.client
+  cookie=self.login()[1]['Set-Cookie'].split(';')[0]
+  c=http.client.HTTPConnection('127.0.0.1',self.httpd.server_port,timeout=3)
+  c.request('GET','/api/events',headers={'Cookie':cookie});r=c.getresponse()
+  self.assertEqual(r.status,200);self.assertTrue(r.readline().startswith(b'data: '));r.close();c.close()
+ def test_wrong_password_tampered_expired_and_rotated_sessions(self):
+  self.assertEqual(self.login('wrong')[0],401)
+  s=self.server_module;token=s.session_token(self.config)
+  for bad in [token+'x','broken']:
+   self.assertEqual(self.request('/api/state',headers={'Cookie':s.COOKIE+'='+bad})[0],401)
+  with patch.object(s.time,'time',return_value=1):expired=s.session_token(self.config)
+  self.assertEqual(s.session_expiry(s.COOKIE+'='+expired,self.config),0)
+  rotated=dict(self.config,signing_key='00'*32)
+  self.assertEqual(s.session_expiry(s.COOKIE+'='+token,rotated),0)
+  with patch.object(s,'access_config',return_value=None):self.assertEqual(self.request('/api/state')[0],503)
+  self.assertNotIn('synthetic-viewer-password',s.ACCESS_FILE.read_text())
+  self.assertEqual(s.ACCESS_FILE.stat().st_mode & 0o777,0o600)
+ def test_login_origin_and_rate_limit(self):
+  self.assertEqual(self.login(Host='monitor.example',Origin='https://other.example')[0],403)
+  import collections,time
+  with patch.object(self.server_module,'LOGIN_FAILURES',collections.deque([time.monotonic()]*10)):
+   self.assertEqual(self.login('wrong')[0],429)
+  self.assertEqual(self.request('/api/state','POST')[0],405)
+
 if __name__=='__main__':unittest.main()
