@@ -83,7 +83,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status);self.send_header('Content-Type',mime)
         if length is not None:self.send_header('Content-Length',str(length))
         self.send_header('Cache-Control','no-store');self.send_header('X-Content-Type-Options','nosniff')
-        self.send_header('Referrer-Policy','no-referrer');self.send_header('X-Robots-Tag','noindex, nofollow, noarchive')
+        # no-referrer makes native form POSTs send Origin: null in browsers.
+        # Keep same-site form origins while withholding referrers from other sites.
+        self.send_header('Referrer-Policy','same-origin');self.send_header('X-Robots-Tag','noindex, nofollow, noarchive')
         self.send_header('Content-Security-Policy',f"default-src 'self'; script-src 'self'; style-src 'self' 'sha256-{LOGIN_STYLE_HASH}'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'")
         for key,value in (extra or {}).items():self.send_header(key,value)
         self.end_headers()
