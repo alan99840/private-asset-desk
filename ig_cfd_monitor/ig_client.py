@@ -25,7 +25,7 @@ class NoRedirect(HTTPRedirectHandler):
 class IGClient:
     STREAM_TLS_CONFIGURED = False
     ROOTS = {'live':'https://api.ig.com/gateway/deal', 'demo':'https://demo-api.ig.com/gateway/deal'}
-    READ = re.compile(r'^/(accounts|positions|working-orders|watchlists(?:/[A-Za-z0-9_-]+)?|markets(?:/[A-Za-z0-9_.-]+)?|history/(?:activity|transactions)|session(?:/encryptionKey)?)$')
+    READ = re.compile(r'^/(accounts|positions|workingorders|watchlists(?:/[A-Za-z0-9_-]+)?|markets(?:/[A-Za-z0-9_.-]+)?|history/(?:activity|transactions)|session(?:/encryptionKey)?)$')
 
     def __init__(self, credentials):
         self.credentials = credentials
@@ -62,7 +62,9 @@ class IGClient:
         if params:
             path += ('&' if '?' in path else '?') + urlencode(params)
         with self.lock:
-            time.sleep(max(0,1.05-(time.monotonic()-self.last_request)))
+            # IG's per-account non-trading limit is 30 REST requests/minute.
+            # Streaming quotes do not use this REST budget.
+            time.sleep(max(0,2.1-(time.monotonic()-self.last_request)))
             self.last_request=time.monotonic()
             headers={'X-IG-API-KEY':self.credentials['api_key'],'Version':str(version),
                      'Accept':'application/json; charset=UTF-8','Content-Type':'application/json; charset=UTF-8',**self.tokens}
@@ -78,9 +80,9 @@ class IGClient:
                     return json.loads(raw) if raw else {}
             except HTTPError as exc:
                 try:
-                    code=json.loads(exc.read(4000)).get('errorCode','ig.http.error')
+                    code=json.loads(exc.read(4000)).get('errorCode',f'ig.http.{exc.code}')
                 except (ValueError,AttributeError):
-                    code='ig.http.error'
+                    code=f'ig.http.{exc.code}'
                 raise IGError(code,exc.code) from None
             except (URLError,TimeoutError,ConnectionError,OSError):
                 raise IGError('ig.network.or.tls.error') from None
