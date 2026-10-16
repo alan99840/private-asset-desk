@@ -1,9 +1,11 @@
 [
   ".gitignore", "README.md", "requirements.txt", "credentials.py", "ig_client.py",
-  "runtime.py", "storage.py", "risk.py", "news.py", "server.py", "setup_server.py",
+  "runtime.py", "storage.py", "risk.py", "news.py", "server.py", "setup_server.py", "chart_history.py",
   "service.py", "manage.py", "export_source.py", "source_manifest.json",
-  "web/index.html", "web/live.js", "web/style.css", "web/favicon.svg",
+  "web/index.html", "web/live.js", "web/style.css", "web/favicon.svg", "web/charts.js",
+  "web/vendor/lightweight-charts.standalone.production.js", "web/vendor/lightweight-charts.LICENSE",
+  "web/vendor/lightweight-charts.NOTICE", "web/vendor/lightweight-charts.SOURCE.txt",
   "setup/index.html", "setup/setup.js", "setup/setup.css",
-  "tests/test_risk.py", "tests/test_live.py", "tests/live-browser.mjs", "tests/live-populated.mjs",
+  "tests/test_risk.py", "tests/test_live.py", "tests/test_charts.py", "tests/test-chart-ui.mjs", "tests/live-browser.mjs", "tests/live-populated.mjs",
   "启动监控平台.command"
 ]
