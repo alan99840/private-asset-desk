@@ -29,9 +29,9 @@ class CollectorTests(unittest.TestCase):
   self.m.store.event('demo:A','transactions',r,now());self.m.store.event('demo:A','transactions',r,now());self.m.store.event('live:B','transactions',r,now())
   self.assertEqual(self.m.store.count('demo:A'),1);self.assertEqual(self.m.store.count('live:B'),1)
  def test_stale_and_funding_gate(self):
-  self.m.state.update(status='connected',account={'equity':12000},account_at=now());self.m.funding=0;self.m.funding_at=now()
+  self.m.state.update(status='connected',account={'equity':12000},account_at=now());self.m.funding=30000;self.m.funding_at=now()
   self.assertEqual(self.m.project()['risk']['status'],'TRIGGERED')
-  self.m.funding=10000;self.m.state['account']['equity']=22000
+  self.m.funding=40000;self.m.state['account']['equity']=16000
   self.assertEqual(self.m.project()['risk']['status'],'TRIGGERED')
   self.m.state['account_at']=(datetime.now(timezone.utc)-timedelta(seconds=31)).isoformat()
   self.assertEqual(self.m.project()['risk']['status'],'STALE')
@@ -60,7 +60,7 @@ class CollectorTests(unittest.TestCase):
   with self.assertRaises(IGError):self.m.history_step()
   self.assertEqual(len(self.m.history_jobs),1)
  def test_funding_explicit_filters_and_dedup(self):
-  row={'dateUtc':now(),'profitAndLoss':'HK$ 100.00','currency':'HKD'}
+  row={'transactionType':'DEPO','dateUtc':now(),'profitAndLoss':'HK$ 100.00','currency':'HKD'}
   class Fake:
    def request(_,method,path,version,params=None):
     return {'transactions':[row,row] if params['type']=='DEPOSIT' else [],'metadata':{'pageData':{'totalPages':1}}}
@@ -92,8 +92,16 @@ class ViewerAccessTests(unittest.TestCase):
  def login(self,password='synthetic-viewer-password',**headers):
   from urllib.parse import urlencode
   return self.request('/auth/login','POST',urlencode({'password':password}),{'Content-Type':'application/x-www-form-urlencoded',**headers})
+ def test_analytics_validation(self):
+  cookie='harbour_viewer='+self.server_module.session_token(self.config)
+  for query in ['shock=nan','mode=atr&shock=11','spread=0','fx=51','cost=-1','resolution=BAD','mode=percent&shock=101','shock=1&shock=2']:
+   status,_,_=self.request('/api/analytics?'+query,headers={'Cookie':cookie});self.assertEqual(status,400)
+  with patch.object(self.server_module,'ANALYTICS') as analytics:
+   analytics.get.return_value={'status':'synthetic'}
+   status,_,data=self.request('/api/analytics?mode=points&shock=-2',headers={'Cookie':cookie})
+   self.assertEqual(status,200);self.assertIn(b'synthetic',data)
  def test_unauthed_data_and_export_are_blocked(self):
-  for path in ['/api/state','/api/ledger','/api/ledger.csv','/api/events']:
+  for path in ['/api/state','/api/analytics','/api/ledger','/api/ledger.csv','/api/events']:
    for method in ['GET','HEAD']:
     status,_,data=self.request(path,method)
     self.assertEqual(status,401);self.assertNotIn(b'private_test_value',data)

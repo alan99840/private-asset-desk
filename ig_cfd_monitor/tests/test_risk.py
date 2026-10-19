@@ -8,15 +8,15 @@ class LossPolicyTests(unittest.TestCase):
         self.assertEqual(evaluate_loss("12000")["status"], "TRIGGERED")
         self.assertEqual(evaluate_loss("11999.99")["status"], "TRIGGERED")
 
-    def test_deposit_cannot_mask_existing_loss(self):
-        result = evaluate_loss(22000, 10000)
-        self.assertEqual(result["status"], "TRIGGERED")
-        self.assertEqual(result["threshold_equity"], 22000)
+    def test_deposit_changes_denominator(self):
+        result = evaluate_loss(22000, 40000)
+        self.assertEqual(result['status'], 'BELOW_THRESHOLD')
+        self.assertEqual(result['threshold_equity'], 16000)
 
-    def test_withdrawal_is_not_a_loss(self):
-        result = evaluate_loss(11000, -19000)
-        self.assertEqual(result["economic_pnl"], 0)
-        self.assertEqual(result["status"], "BELOW_THRESHOLD")
+    def test_withdrawal_counts_in_user_capital_ratio(self):
+        result = evaluate_loss(11000, 30000)
+        self.assertTrue(result['withdrawals_reduce_ratio'])
+        self.assertEqual(result['status'], 'TRIGGERED')
 
     def test_equity_not_cash_balance_is_used(self):
         self.assertEqual(evaluate_loss(12000)["loss_fraction"], 0.6)

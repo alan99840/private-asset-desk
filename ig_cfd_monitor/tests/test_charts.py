@@ -67,7 +67,7 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(skipped, 0)
         self.assertEqual(len(candles), 2)
         self.assertEqual(candles[0], {'time': 1704067200, 'open': 20, 'high': 22,
-                                     'low': 18, 'close': 21, 'volume': 3})
+                                     'low': 18, 'close': 21, 'volume': 3, 'ask': {'open':21,'high':23,'low':19,'close':22}})
         self.assertEqual(candles[1]['open'], -4)
         self.assertNotIn('volume', candles[1])
 
