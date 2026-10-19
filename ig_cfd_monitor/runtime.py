@@ -457,10 +457,10 @@ class Monitor:
                 'deposit_count':len(self.funding_rows),'pending_windows':len(self.funding_jobs),
                 'basis':'IG_DEPO_gross_deposits'}
             out['costs']=copy.deepcopy(self.cost_summary)
-            from events_calendar import relevant
+            from events_calendar import relevant, upcoming
             calendar=out.get('calendar',{})
-            today=datetime.now(timezone(timedelta(hours=8))).date().isoformat()
-            calendar['items']=[{**e,'related':relevant(e,out['markets'])} for e in calendar.get('items',[]) if e['date']>=today][:30]
+            calendar_now=datetime.now(timezone.utc)
+            calendar['items']=[{**e,'related':relevant(e,out['markets'])} for e in calendar.get('items',[]) if upcoming(e,calendar_now)][:30]
             out['calendar']=calendar
             out['market_specs']=copy.deepcopy(self.market_specs)
             eq=(out.get('account') or {}).get('equity')

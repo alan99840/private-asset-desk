@@ -52,6 +52,13 @@ def parse_schedule(source,body,year):
     if not items:raise ValueError('empty_schedule')
     return items
 
+def upcoming(item,now=None):
+    now=now or datetime.now(timezone.utc)
+    if item.get('at'):return datetime.fromisoformat(item['at'])>=now
+    # Date-only decisions stay visible for their entire official local date,
+    # which can continue into the next Hong Kong calendar day.
+    return item['date']>=now.astimezone(ZoneInfo(item['timezone'])).date().isoformat()
+
 def relevant(event,markets):
     names=[(m['epic'],m.get('name','')) for m in markets]
     if event['source'] in ('Fed','BLS'):return [name for _,name in names]
