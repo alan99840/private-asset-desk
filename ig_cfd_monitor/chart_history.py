@@ -89,6 +89,12 @@ def normalize_prices(rows):
             skipped += 1
             continue
         candle = {'time': stamp, 'open': op, 'high': high, 'low': low, 'close': close}
+        asks = [finite((row.get(k) or {}).get('ask')) if isinstance(row.get(k), dict) else None
+                for k in ('openPrice', 'highPrice', 'lowPrice', 'closePrice')]
+        if all(v is not None for v in asks):
+            ao, ah, al, ac = asks
+            if ah >= max(ao, al, ac) and al <= min(ao, ah, ac):
+                candle['ask'] = dict(zip(('open','high','low','close'), asks))
         volume = finite(row.get('lastTradedVolume'))
         if volume is not None and volume >= 0:
             candle['volume'] = volume
@@ -425,6 +431,9 @@ class ChartHistory:
                       'message': message, 'source': 'IG REST /prices v3',
                       'skipped_rows': meta.get('skipped_rows', 0), 'cache_limit': MAX_CANDLES,
                       'gaps': meta.get('gaps', []),
+                      'completion_basis': 'All except the final unconfirmed bar; next bar confirms closure',
+                      'forming_tail_time': candles[-1]['time'] if candles else None,
+                      'ask_ohlc_available': sum(1 for c in candles if 'ask' in c),
                       'next_before': meta.get('next_before', earliest if earliest is not None else int(time.time())),
                       'next_cursor': meta.get('next_cursor'), 'range_pending': bool(window)}
             if meta.get('error'):

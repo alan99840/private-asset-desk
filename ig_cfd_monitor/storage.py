@@ -53,3 +53,25 @@ class Store:
     def get(self,scope,key,default=None):
         with self.lock:row=self.db.execute('SELECT payload FROM metadata WHERE scope=? AND key=?',(scope,key)).fetchone()
         return json.loads(row[0]) if row else default
+
+
+    def daily_series(self, scope, days=730):
+        """One last observed snapshot per Hong Kong date, across all stored history.
+
+        A day without observations stays absent. Today is provisional and every
+        point carries its actual sample time rather than an invented midnight NAV.
+        """
+        from datetime import datetime, timezone, timedelta
+        today = datetime.now(timezone(timedelta(hours=8))).date().isoformat()
+        with self.lock:
+            rows = self.db.execute("""
+                SELECT date(at, '+8 hours') day, MAX(at) at
+                FROM snapshots WHERE scope=? GROUP BY day ORDER BY day DESC LIMIT ?
+            """, (scope, days)).fetchall()
+            result = []
+            for day, at in reversed(rows):
+                raw = self.db.execute('SELECT payload FROM snapshots WHERE scope=? AND at=?', (scope, at)).fetchone()
+                if raw:
+                    result.append({'day': day, 'at': at, 'provisional': day == today,
+                                   **json.loads(raw[0])})
+        return result

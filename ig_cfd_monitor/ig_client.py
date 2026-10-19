@@ -61,33 +61,44 @@ class IGClient:
             raise IGError('local.default.account.change.forbidden')
         if params:
             path += ('&' if '?' in path else '?') + urlencode(params)
-        with self.lock:
-            # IG's per-account non-trading limit is 30 REST requests/minute.
-            # Streaming quotes do not use this REST budget.
-            time.sleep(max(0,2.1-(time.monotonic()-self.last_request)))
-            self.last_request=time.monotonic()
-            headers={'X-IG-API-KEY':self.credentials['api_key'],'Version':str(version),
-                     'Accept':'application/json; charset=UTF-8','Content-Type':'application/json; charset=UTF-8',**self.tokens}
-            req=Request(self.root+path,data=json.dumps(payload).encode() if payload is not None else None,headers=headers,method=method)
-            try:
-                with self.opener.open(req,timeout=20) as response:
-                    for header in ('CST','X-SECURITY-TOKEN'):
-                        if response.headers.get(header):
-                            self.tokens[header]=response.headers[header]
-                    raw=response.read(8_000_001)
-                    if len(raw)>8_000_000:
-                        raise IGError('ig.response.too.large')
-                    return json.loads(raw) if raw else {}
-            except HTTPError as exc:
+        # Retry idempotent reads only. TLS validation and the configured proxy
+        # remain in force; certificate failures and authentication errors fail fast.
+        attempts = 3 if method == 'GET' else 1
+        for attempt in range(attempts):
+            with self.lock:
+                time.sleep(max(0, 2.1-(time.monotonic()-self.last_request)))
+                self.last_request = time.monotonic()
+                headers = {'X-IG-API-KEY': self.credentials['api_key'], 'Version': str(version),
+                           'Accept': 'application/json; charset=UTF-8',
+                           'Content-Type': 'application/json; charset=UTF-8', **self.tokens}
+                req = Request(self.root+path, data=json.dumps(payload).encode() if payload is not None else None,
+                              headers=headers, method=method)
                 try:
-                    code=json.loads(exc.read(4000)).get('errorCode',f'ig.http.{exc.code}')
-                except (ValueError,AttributeError):
-                    code=f'ig.http.{exc.code}'
-                raise IGError(code,exc.code) from None
-            except (URLError,TimeoutError,ConnectionError,OSError):
-                raise IGError('ig.network.or.tls.error') from None
-            except ValueError:
-                raise IGError('ig.invalid.json') from None
+                    with self.opener.open(req, timeout=10) as response:
+                        for header in ('CST', 'X-SECURITY-TOKEN'):
+                            if response.headers.get(header):
+                                self.tokens[header] = response.headers[header]
+                        raw = response.read(8_000_001)
+                        if len(raw) > 8_000_000:
+                            raise IGError('ig.response.too.large')
+                        return json.loads(raw) if raw else {}
+                except HTTPError as exc:
+                    try:
+                        code = json.loads(exc.read(4000)).get('errorCode', f'ig.http.{exc.code}')
+                    except (ValueError, AttributeError):
+                        code = f'ig.http.{exc.code}'
+                    failure = IGError(code, exc.code)
+                    retryable = exc.code in (500, 502, 503, 504)
+                except (URLError, TimeoutError, ConnectionError, OSError) as exc:
+                    reason = getattr(exc, 'reason', exc)
+                    certificate = isinstance(reason, ssl.SSLCertVerificationError)
+                    failure = IGError('ig.tls.certificate.invalid' if certificate else 'ig.network.or.tls.error')
+                    retryable = not certificate
+                except ValueError:
+                    raise IGError('ig.invalid.json') from None
+            if not retryable or attempt == attempts-1:
+                raise failure from None
+            time.sleep(min(2**attempt, 4))
 
     def login(self):
         body={'identifier':self.credentials['identifier'],'password':self.credentials['password'],'encryptedPassword':False}

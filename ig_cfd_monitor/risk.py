@@ -1,39 +1,32 @@
-"""Account-level loss calculation. This module never executes broker actions."""
+"""User-selected gross-deposit capital retention policy; never broker actions."""
 from decimal import Decimal, InvalidOperation
 
 
-def evaluate_loss(equity, net_external_flows=0, initial_capital=30000,
-                  loss_fraction="0.60", age_seconds=0, max_age_seconds=30):
-    """Net external flows EXCLUDE the initial funding and include withdrawals < 0.
+def evaluate_loss(equity, total_deposits=30000, loss_fraction='0.60',
+                  age_seconds=0, max_age_seconds=30):
+    """Loss = max(0, 1 - equity / cumulative gross deposits).
 
-    Keep the original HKD risk budget fixed: deposits never erase a loss and
-    withdrawals alone never count as trading losses. Unknown/stale inputs block
-    a fresh evaluation; they never imply the account is safe.
+    Withdrawals reduce equity and count against this user-selected budget.
+    This is capital retention, not trading performance.
     """
     try:
-        values = [Decimal(str(x)) for x in
-                  (equity, net_external_flows, initial_capital, loss_fraction,
-                   age_seconds, max_age_seconds)]
+        eq, deposits, fraction, age, max_age = [Decimal(str(x)) for x in
+            (equity, total_deposits, loss_fraction, age_seconds, max_age_seconds)]
     except (InvalidOperation, ValueError, TypeError):
-        return {"status": "UNKNOWN", "reason": "missing_or_invalid_input"}
-    if not all(x.is_finite() for x in values):
-        return {"status": "UNKNOWN", "reason": "non_finite_input"}
-    eq, flows, base, fraction, age, max_age = values
-    if base <= 0 or not 0 < fraction <= 1 or max_age < 0:
-        return {"status": "UNKNOWN", "reason": "invalid_policy"}
+        return {'status': 'UNKNOWN', 'reason': 'missing_or_invalid_input'}
+    if not all(x.is_finite() for x in (eq, deposits, fraction, age, max_age)):
+        return {'status': 'UNKNOWN', 'reason': 'non_finite_input'}
+    if deposits <= 0 or not 0 < fraction <= 1 or max_age < 0:
+        return {'status': 'UNKNOWN', 'reason': 'invalid_policy'}
     if age < 0 or age > max_age:
-        return {"status": "STALE", "reason": "timestamp_not_current"}
-    adjusted = eq - flows
-    pnl = adjusted - base
-    loss = max(Decimal(0), -pnl)
-    threshold = base * (1 - fraction) + flows
-    return {
-        "status": "TRIGGERED" if loss >= base * fraction else "BELOW_THRESHOLD",
-        "equity": float(eq), "adjusted_equity": float(adjusted),
-        "net_external_flows": float(flows), "economic_pnl": float(pnl),
-        "loss_fraction": float(loss / base), "loss_budget": float(base * fraction),
-        "threshold_equity": float(threshold),
-        "distance_to_threshold": float(eq - threshold),
-        "basis": "fixed_initial_capital_after_external_flow_adjustment",
-        "automatic_execution": False,
-    }
+        return {'status': 'STALE', 'reason': 'timestamp_not_current'}
+    retention = eq / deposits
+    loss = max(Decimal(0), deposits - eq)
+    threshold = deposits * (1 - fraction)
+    return {'status': 'TRIGGERED' if eq <= threshold else 'BELOW_THRESHOLD',
+            'equity': float(eq), 'total_deposits': float(deposits),
+            'equity_ratio': float(retention), 'loss_fraction': float(loss / deposits),
+            'capital_shortfall': float(loss), 'loss_budget': float(deposits * fraction),
+            'threshold_equity': float(threshold), 'distance_to_threshold': float(eq - threshold),
+            'basis': 'equity_divided_by_cumulative_gross_deposits',
+            'withdrawals_reduce_ratio': True, 'automatic_execution': False}

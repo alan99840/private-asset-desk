@@ -13,3 +13,4 @@ qa/
 .venv/
 backups/
 *.pid
+node_modules/

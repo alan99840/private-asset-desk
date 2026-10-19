@@ -18,15 +18,26 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from runtime import Monitor
 from chart_history import ChartHistory, ChartError, MAX_DRAWING_BYTES
+from trade_markers import TradeMarkers
+from quant import Analytics, num
 
 ROOT=Path(__file__).resolve().parent
 ASSETS={'/':('index.html','text/html; charset=utf-8'),'/index.html':('index.html','text/html; charset=utf-8'),
  '/style.css':('style.css','text/css; charset=utf-8'),'/live.js':('live.js','text/javascript; charset=utf-8'),
  '/favicon.svg':('favicon.svg','image/svg+xml'),'/charts.js':('charts.js','text/javascript; charset=utf-8'),
- '/vendor/lightweight-charts.standalone.production.js':('vendor/lightweight-charts.standalone.production.js','text/javascript; charset=utf-8')}
+ '/risk-ui.js':('risk-ui.js','text/javascript; charset=utf-8'),
+ '/risk-ui.css':('risk-ui.css','text/css; charset=utf-8'),
+ '/cfd-guide.html':('cfd-guide.html','text/html; charset=utf-8'),'/cfd-guide.css':('cfd-guide.css','text/css; charset=utf-8'),
+ '/vendor/lightweight-charts.standalone.production.js':('vendor/lightweight-charts.standalone.production.js','text/javascript; charset=utf-8'),
+ '/tv-reference.html':('tv-reference.html','text/html; charset=utf-8'),
+ '/vendor/tv-reference.js':('vendor/tv-reference.js','text/javascript; charset=utf-8')}
+TV_DOCUMENT='/tv-reference.html'
+TV_PUBLIC_BUNDLE='/vendor/tv-reference.js'
 SLOTS=threading.BoundedSemaphore(32)
 MONITOR=None
 CHARTS=None
+TRADES=None
+ANALYTICS=None
 ACCESS_FILE=ROOT/'state'/'viewer_access.json'
 COOKIE='harbour_viewer'
 SESSION_SECONDS=12*60*60
@@ -34,6 +45,8 @@ LOGIN_LOCK=threading.Lock()
 LOGIN_FAILURES=deque()
 LOGIN_STYLE='''body{margin:0;background:#f4f2ec;color:#233d37;font:16px system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}main{box-sizing:border-box;background:#fff;padding:40px;border:1px solid #dddcd4;border-radius:16px;width:min(420px,92vw)}small{letter-spacing:.15em}h1{font-size:26px;margin:20px 0 10px}p{line-height:1.6;color:#64716b}label{display:block;margin:24px 0 8px}input,button{box-sizing:border-box;width:100%;padding:13px;font:inherit;border-radius:8px}input{border:1px solid #b8c3bc}button{margin-top:16px;border:0;background:#244e42;color:white;cursor:pointer}.error{color:#a23c36}'''
 LOGIN_STYLE_HASH=base64.b64encode(hashlib.sha256(LOGIN_STYLE.encode()).digest()).decode()
+MAIN_CSP=f"default-src 'self'; script-src 'self'; style-src 'self' 'sha256-{LOGIN_STYLE_HASH}'; img-src 'self' data:; connect-src 'self'; frame-src 'self' https://s.tradingview.com https://www.tradingview.com https://www.tradingview-widget.com; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'"
+TV_CSP="default-src 'none'; sandbox allow-scripts; script-src 'self' https://s3.tradingview.com; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; frame-src https://s.tradingview.com https://www.tradingview.com https://www.tradingview-widget.com; object-src 'none'; base-uri 'none'; form-action 'none'"
 
 
 def set_viewer_password(password):
@@ -82,19 +95,21 @@ def session_expiry(cookie_header,config):
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*_):pass
-    def headers_for(self,mime,status=200,length=None,extra=None):
+    def headers_for(self,mime,status=200,length=None,extra=None,isolated_widget=False):
         self.send_response(status);self.send_header('Content-Type',mime)
         if length is not None:self.send_header('Content-Length',str(length))
         self.send_header('Cache-Control','no-store');self.send_header('X-Content-Type-Options','nosniff')
         # no-referrer makes native form POSTs send Origin: null in browsers.
         # Keep same-site form origins while withholding referrers from other sites.
-        self.send_header('Referrer-Policy','same-origin');self.send_header('X-Robots-Tag','noindex, nofollow, noarchive')
-        self.send_header('Content-Security-Policy',f"default-src 'self'; script-src 'self'; style-src 'self' 'sha256-{LOGIN_STYLE_HASH}'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'")
+        self.send_header('Referrer-Policy','no-referrer' if isolated_widget else 'same-origin');self.send_header('X-Robots-Tag','noindex, nofollow, noarchive')
+        # The widget is a separate opaque document even when opened directly.
+        # Never grant allow-same-origin or add third-party scripts to MAIN_CSP.
+        self.send_header('Content-Security-Policy',TV_CSP if isolated_widget else MAIN_CSP)
         for key,value in (extra or {}).items():self.send_header(key,value)
         self.end_headers()
-    def reply(self,payload,status=200,mime='application/json; charset=utf-8',extra=None):
+    def reply(self,payload,status=200,mime='application/json; charset=utf-8',extra=None,isolated_widget=False):
         body=json.dumps(payload,ensure_ascii=False,allow_nan=False).encode() if isinstance(payload,(dict,list)) else payload
-        self.headers_for(mime,status,len(body),extra)
+        self.headers_for(mime,status,len(body),extra,isolated_widget)
         if self.command!='HEAD':self.wfile.write(body)
     def login_page(self,message='',status=200):
         html=f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Harbour · 访问验证</title><style>{LOGIN_STYLE}</style><main><small>HARBOUR / PRIVATE MONITOR</small><h1>访问账户监控</h1><p>输入共享访问密码，查看账户与实时行情。</p><form method="post" action="/auth/login"><label for="password">访问密码</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required autofocus><button type="submit">进入监控平台</button></form><p class="error" role="status">{message}</p><p>登录有效期为 12 小时。</p></main></html>'''
@@ -112,10 +127,26 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         uri=urlsplit(self.path)
         try:
+            # An opaque sandbox sends no same-site credentials for a classic
+            # script fetch. This exact build artifact contains public code only;
+            # the document, every other asset and all APIs remain authenticated.
+            if uri.path==TV_PUBLIC_BUNDLE:
+                filename,mime=ASSETS[TV_PUBLIC_BUNDLE]
+                self.reply((ROOT/'web'/filename).read_bytes(),mime=mime);return
             if not self.authorize(uri.path):return
             if uri.path in ASSETS:
-                filename,mime=ASSETS[uri.path];self.reply((ROOT/'web'/filename).read_bytes(),mime=mime)
+                filename,mime=ASSETS[uri.path];self.reply((ROOT/'web'/filename).read_bytes(),mime=mime,isolated_widget=uri.path==TV_DOCUMENT)
             elif uri.path=='/api/state':self.reply(MONITOR.project())
+            elif uri.path=='/api/analytics':
+                query=parse_qs(uri.query,max_num_fields=7)
+                if any(len(v)!=1 for v in query.values()) or set(query)-{'resolution','mode','shock','fx','spread','cost','epic'}:raise ChartError('invalid_query')
+                resolution=query.get('resolution',['HOUR'])[0];mode=query.get('mode',['atr'])[0]
+                if resolution not in ('MINUTE','MINUTE_5','MINUTE_15','MINUTE_30','HOUR','DAY','WEEK','MONTH') or mode not in ('atr','adverse','percent','points'):raise ChartError('invalid_query')
+                shock=num(query.get('shock',['1'])[0]);fx=num(query.get('fx',['0'])[0]);spread=num(query.get('spread',['1'])[0]);cost=num(query.get('cost',['0'])[0])
+                if shock is None or not -100000<=shock<=100000 or fx is None or not -50<=fx<=50 or spread is None or not 1<=spread<=20 or cost is None or not 0<=cost<=10000000:raise ChartError('invalid_scenario')
+                if mode in ('atr','adverse') and abs(shock)>10:raise ChartError('invalid_scenario')
+                if mode=='percent' and abs(shock)>100:raise ChartError('invalid_scenario')
+                self.reply(ANALYTICS.get(resolution,mode,shock,fx,spread,cost,query.get('epic',[None])[0]))
             elif uri.path=='/api/chart':
                 query=parse_qs(uri.query,max_num_fields=5)
                 if any(len(values)!=1 for values in query.values()) or set(query)-{'epic','resolution','before','cursor'}:
@@ -126,6 +157,10 @@ class Handler(BaseHTTPRequestHandler):
                 query=parse_qs(uri.query,max_num_fields=2)
                 if set(query)!={'epic'} or len(query['epic'])!=1:raise ChartError('invalid_query')
                 self.reply(CHARTS.drawings(query['epic'][0]))
+            elif uri.path=='/api/chart/trades':
+                query=parse_qs(uri.query,max_num_fields=2)
+                if set(query)!={'epic'} or len(query['epic'])!=1:raise ChartError('invalid_query')
+                self.reply(TRADES.get(query['epic'][0]))
             elif uri.path=='/api/ledger':
                 query=parse_qs(uri.query);page=max(1,min(100000,int(query.get('page',['1'])[0])))
                 rows=MONITOR.ledger();kind=query.get('kind',['all'])[0]
@@ -151,11 +186,14 @@ class Handler(BaseHTTPRequestHandler):
     def events(self):
         if not SLOTS.acquire(blocking=False):self.reply({'error':'capacity'},503);return
         try:
+            # Keep this stream bound to the monitor that accepted it, including
+            # while a test server is being torn down or replaced.
+            monitor=MONITOR
             self.connection.settimeout(15);self.headers_for('text/event-stream; charset=utf-8')
             # IG ticks are projected to browsers at up to 4 Hz. No REST requests per viewer.
             end=time.monotonic()+55;last='';last_heartbeat=0
             while time.monotonic()<end and time.time()<self.session_until:
-                out=MONITOR.project()
+                out=monitor.project()
                 # Age fields make payload change; a 1 Hz heartbeat handles quiet markets.
                 comparison=json.dumps({k:v for k,v in out.items() if k not in ('generated_at','account_age_seconds','markets')},sort_keys=True)
                 comparison+=json.dumps([{k:v for k,v in q.items() if k!='age_seconds'} for q in out['markets']],sort_keys=True)
@@ -226,14 +264,14 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    global MONITOR,CHARTS
+    global MONITOR,CHARTS,TRADES,ANALYTICS
     parser=argparse.ArgumentParser();parser.add_argument('--port',type=int,default=8786);parser.add_argument('--set-password',action='store_true');args=parser.parse_args()
     if args.set_password:
         from getpass import getpass
         password=getpass('Viewer password: ')
         if password!=getpass('Confirm password: '):raise SystemExit('Passwords do not match.')
         set_viewer_password(password);print('Viewer password saved. Existing sessions are invalidated.');return
-    MONITOR=Monitor();MONITOR.start();CHARTS=ChartHistory(MONITOR)
+    MONITOR=Monitor();MONITOR.start();CHARTS=ChartHistory(MONITOR);TRADES=TradeMarkers(MONITOR);ANALYTICS=Analytics(MONITOR,CHARTS)
     print(f'Harbour read-only monitor: http://127.0.0.1:{args.port}',flush=True)
     ThreadingHTTPServer(('127.0.0.1',args.port),Handler).serve_forever()
 
