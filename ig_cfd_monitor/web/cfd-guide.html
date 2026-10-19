@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>CFD 与量化监控 · Harbour</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/cfd-guide.css"></head>
+<body><main class="guide-shell">
+<header class="guide-top"><div class="brand">HARBOUR / RESEARCH</div><nav aria-label="返回监控"><a href="/#risk">风险与连接</a><a href="/#charts">图表与成交</a></nav></header>
+<p class="eyebrow">审查与学习材料 · 2026 年 10 月 17 日 · 香港时间</p>
+<h1>从“看见仓位”走向<br>“理解风险与条件情景”</h1>
+<p class="lead">先准确回答价格变化会怎样影响账户，再研究未来可能落在哪些区间。技术指标描述当前状态；有预测价值与否，要靠未见数据验证。</p>
+<div class="status"><strong>当前状态：</strong>网站已具备账户、持仓、流水、IG 行情及真实成交点。P0/P1 的仓位风险、描述指标、条件压力测试、费用分类及官方事件日历已上线；字段不全时标记待核验。P2 概率模型按你的要求未实施。<a href="/#quant">打开量化监控 ↗</a>本页不提供当前行情预测或买卖指令。</div>
+<nav class="toc" aria-label="本文目录"><a href="#audit">升级顺序</a><a href="#mechanics">CFD 核心知识</a><a href="#metrics">指标怎样用</a><a href="#forecast">Forecast 怎样验证</a><a href="#learn">六次学习练习</a><a href="#sources">官方与原著来源</a></nav>
+<div class="stage-grid"><div class="stage"><span>第一步 · P0</span><h3>风险可计量</h3><p>点值、HKD 损益敏感度、保证金、仓位聚合、真实成本与数据质量。</p></div><div class="stage"><span>第二步 · P1</span><h3>状态与情景</h3><p>趋势、波动、关键区间、事件，以及不同变化对账户的影响。</p></div><div class="stage"><span>范围外 · P2</span><h3>经过验证的区间</h3><p>样本外评估、预测记录、覆盖率和简单基准，持续检查失效。</p></div></div>
+
+<section class="guide-section" id="audit"><h2>建议按这个顺序升级</h2><p>审查以本版本源码和本机缓存结构为依据。账户金额、成交编号和个人账户样本不写入本学习页。</p>
+<div class="table-wrap"><table><thead><tr><th>模块</th><th>已实现</th><th>使用边界</th></tr></thead><tbody>
+<tr><td>P0 · 账户与入金</td><td>独立同步、分窗口核验累计 DEPO、60% 提醒、香港日期权益日线。</td><td>亏损 = max(0, 1 − 权益 / 累计入金)；提款也影响该比例。覆盖从配置日期开始，不等于账户成立以来审计。</td></tr>
+<tr><td>P0 · 合约与仓位</td><td>IG 产品规格、估算 HKD 点值、总/净敞口、杠杆、集中度、止损距离及账户盈亏核对。</td><td>只支持可核验的线性规格；FX 为估算，误差超容限时暂停情景。未设止损不填损失上限。</td></tr>
+<tr><td>P0 · 保证金</td><td>IG 实际权益、已用保证金、可用资金及观察提示。</td><td>不执行强平；实际券商强平线未配置。情景中的保证金不变只是计算假设。</td></tr>
+<tr><td>P0 · 数据质量</td><td>完成 bar、重复、异常 OHLC、内部缺口、样本年龄、同步收益区间和独立数据有效期校验。</td><td>完整产品开市日历未从 IG 返回时，不把可能休市缺口认证为完整数据；不合格时停止条件结论。</td></tr>
+<tr><td>P1 · 成本与事件</td><td>已入账费用分类、当前价差、成本假设、IG 到期/换约字段、Fed/BoJ/BLS/EIA 官方日历。</td><td>未知未来费用、未返回换约字段、未覆盖事件均明确标记；不生成不存在的报价或市场共识。</td></tr>
+<tr><td>P1 · 状态与情景</td><td>EMA20/50、ATR14、RSI14、20/60 根区间、相关性、±ATR 与点数/百分比/FX/价差联合冲击。</td><td>描述指标和条件推演，不提供未来发生概率。P2 训练、回测及概率预测未实施。</td></tr>
+</tbody></table></div>
+<p>同一产品分成多笔开仓，仍是同一主要价格风险；不同产品的相关性也可能随市场环境变化。总敞口与净敞口应同时显示，不能只看抵消后的净数。</p>
+<p>已设定的累计亏损提醒可以保留，但应另设更早、可配置的单笔风险、日内损失、回撤和保证金提示。累计损失、资金调整后的收益与净值高水位回撤是不同口径，页面须分别命名。</p></section>
+
+<section class="guide-section" id="mechanics"><h2>先掌握 CFD 的六个关键问题</h2>
+<h3>1. 买的是怎样的合约？</h3><p>CFD 提供价格变动敞口，不等同于拥有标的资产。现金/无固定到期合约与期货型 CFD 的费用、到期和换约机制不同，先读自己所交易 EPIC 的具体产品信息。不同开户实体和客户类别的杠杆、保护条款及费率不能互相套用。访问某个地区网页，不证明账户属于该实体。<a href="#s4">[4]</a><a href="#s6">[6]</a><a href="#s8">[8]</a></p>
+<h3>2. “一个点”究竟值多少？</h3><div class="formula">价格盈亏 ≈ 方向 × 合约数量 × 每单位每个 IG 报价点价值 × 价格变动<br>HKD 盈亏 ≈ 原币盈亏 × 相应原币兑 HKD 换算率 − 已换算为 HKD 的适用费用</div><p>多仓估算平仓侧用 Bid，空仓用 Ask。先核对 unit、onePipMeans、valueOfOnePip、scalingFactor 与币种；不要机械地同时乘 contractSize 和每点价值。IG 图与其他平台可能有报价缩放或合约差别，不能直接混用价格。<a href="#s1">[1]</a><a href="#s2">[2]</a></p><p class="small">教学假设：每合约每点 USD 1，数量 0.2，变动 20 点，原币毛盈亏绝对值为 USD 4；假设换算率 HKD 8/USD，则为 HKD 32，尚未扣费。这里的单位、汇率和数值均为算术示例，不是当前合约规格或市场报价。</p>
+<h3>3. 保证金为什么不是亏损上限？</h3><p>保证金是维持敞口所需的抵押，价格损益作用于整个仓位。普通止损可能受跳空与滑点影响；保证止损须核实产品是否支持及适用条件。经纪商平仓流程和你的风险预算是两套机制，不能等同。<a href="#s6">[6]</a></p>
+<h3>4. 隔夜与换约为什么会改变结果？</h3><p>现金型 CFD 常有隔夜融资；期货型的相关持有成本通常反映在定价、价差和到期/换约中，并非持有完全免费。无固定到期商品 CFD 可能参考相邻期货，basis 调整与经纪商收费要分开。股票 CFD 的股息/公司行动、股票空头借券费也需单列，不能套用到每种商品或指数。<a href="#s4">[4]</a><a href="#s5">[5]</a><a href="#s7">[7]</a></p>
+<h3>5. HKD base 消除了汇率风险吗？</h3><p>没有。读取实际结算币种与换算规则；“标的受某种货币影响”和“盈亏用某种货币结算”是不同风险。不要把整个名义敞口自动当成相同金额的现货外币余额。港币联系汇率机制也不等于所有外币风险消失。<a href="#s2">[2]</a><a href="#s4">[4]</a><a href="#s9">[9]</a></p>
+<h3>6. 自己的成交数量与市场成交量有什么不同？</h3><p><strong>图上数量标签：</strong>自己的每笔 IG 成交 size，结合产品单位解读。<strong>IG 报告量：</strong>历史接口的 lastTradedVolume 字段，其存在或为非零不证明它代表整个市场；官方指出非交易所产品该字段通常为空。当前缓存虽有数值，统计范围和单位仍须核验，零值也不能直接解释为市场无成交。未核验前，不用它计算正式 VWAP、OBV 或量价信号。<a href="#s3">[3]</a></p><p>若之后引入期货交易所成交量作为代理，须标出交易所、具体合约、时段、换月和基差差异，与 IG CFD 价格分开。</p></section>
+
+<section class="guide-section" id="metrics"><h2>首期只保留能解释的指标</h2><p>以下是待实施的设计参数，不是已经证明有效的交易策略。每项都标明产品、周期、已完成 bar 时间、样本数和数据状态。</p>
+<div class="table-wrap"><table><thead><tr><th>指标</th><th>它能回答什么</th><th>不应怎样解读</th></tr></thead><tbody>
+<tr><td>EMA20 / EMA50</td><td>价格相对均线的位置、均线斜率与趋势结构。</td><td>均线滞后；交叉不保证后续上涨或下跌。</td></tr>
+<tr><td>ATR14</td><td>近期波动的点数尺度；不同时间段风险是否扩大。</td><td>ATR 没有方向；±1 ATR 不是保证区间或校准概率。</td></tr>
+<tr><td>止损距离 / ATR</td><td>按正确 Bid/Ask 和方向，判断剩余缓冲是否相对波动很小。</td><td>没有止损就显示未设；先检查已触及/穿越，不用绝对值掩盖异常。</td></tr>
+<tr><td>前 20 / 60 根高低</td><td>最新已完成 bar 是否离开此前的区间。</td><td>前置窗口排除被比较的 bar；突破仍可能失败。</td></tr>
+<tr><td>RSI14（辅助）</td><td>观察近期相对动量，辅助理解趋势或震荡。</td><td>RSI 70 不是上涨概率 70%；超买不等于必须下跌。</td></tr>
+<tr><td>滚动相关性</td><td>在对齐的有效收益样本中，观察产品是否共同变化。</td><td>历史负相关不保证未来对冲；不能把不同时段报价硬拼。</td></tr>
+</tbody></table></div>
+<p>首期以小时、日、周提供持仓背景，分钟图辅助观察；参数的“20”指 20 根该周期 bar，不一定是 20 天。EMA、MACD 等同源价格变换不算相互独立的证据，多指标投票分数也不能直接变成概率。</p>
+<p>未完成 bar、暖启动不足、未核验缺口、异常价格或换约口径不明时显示“数据不足”。正常休市与漏数据要区分：休市可以基于最后完成 K 线研究下一时段，但必须标明数据日期，不能称作实时交易信号。若价格为零或负数，不盲目计算对数收益或 ATR/价格百分比。</p></section>
+
+<section class="guide-section" id="forecast"><h2>Forecast 应该是一套可核对的情景</h2><p>第一版先做“条件情景 + 仓位压力测试”。它帮助准备不同结果，尚不等于经过校准的价格预测。</p>
+<div class="two-col"><div><h3>行情条件卡</h3><div class="scenario"><h3>延续</h3><p>列明已完成 bar 的趋势结构与前区间突破条件，同时写清回落到何处时该情景失效。</p></div><div class="scenario"><h3>震荡</h3><p>区间上下沿、波动收缩/扩张与突破失败条件，给出另一侧可能发生什么。</p></div><div class="scenario"><h3>反转 / 跳空</h3><p>列出结构破坏、波动放大或事件冲击，尤其关注止损滑点与保证金缓冲。</p></div></div><div><h3>账户影响卡</h3><p>点值与换算核验后，显示价格变化 ±1、±2 ATR 或用户自选点数，对每仓与全账户 HKD 损益的影响。</p><p>同时测试多产品共同冲击、FX 变化、点差扩大及额外持仓成本。使用相同情景日期，不把各产品最有利的路径拼在一起。</p><div class="formula">情景增量损益（HKD）≈ Σ（带方向数量 × 已核验 HKD 每点价值 × 价格冲击）− 增量 HKD 成本</div><p class="small">此处是局部、固定换算假设下的线性近似。汇率、费用、保证金分档及强平过程可能改变结果；输入缺失时显示待核验，不输出看似精确的金额。</p></div></div>
+<h3>以后怎样决定是否发布预测区间？</h3><p>先与“价格不变”等简单基准比较，再按时间顺序做样本外滚动评估。记录每次预测的生成时间、输入版本、期限、区间和到期结果，检查实际覆盖率与区间宽度。训练、参数选择与测试分开；不得随机打乱时间造成未来信息泄漏。<a href="#s10">[10]</a></p><p>历史分位数或 bootstrap 可以用于研究不确定性，但历史覆盖率不能直接保证未来。多产品模拟应保留共同冲击，重叠预测窗口也不是完全独立样本。价格预测的误差评估与实际交易的成本后收益评估分开；若转化为交易策略，还须扣除 Bid/Ask、滑点、融资/roll 与 FX 成本。</p><p>原油可关注 EIA 石油报告与假期调整；日本指数可关注 BoJ 会议及报告。事件是风险背景，不预设利多或利空方向。所有日程转换香港时间，并保留官方来源和变更状态。<a href="#s11">[11]</a><a href="#s12">[12]</a></p></section>
+
+<section class="guide-section" id="learn"><h2>六次学习，每次完成一个练习</h2><p class="small">按自己的节奏学习；这不是自动提醒或已创建的课程日程。</p>
+<details open><summary>01 · 读懂一份合约</summary><p>辨认 CFD、Bid/Ask、size、unit、点值、报价缩放和结算币种。</p><p class="exercise">练习：选一个教学产品，计算变动 10 点时，多仓和空仓分别盈亏多少，再检查是否重复乘了合约乘数。</p></details>
+<details><summary>02 · 敞口、杠杆与保证金</summary><p>分清当前净值、名义敞口、保证金占用、可用资金和亏损预算；普通止损与保证止损也分开。</p><p class="exercise">练习：对同一冲击分别写“损失多少”与“需要多少保证金”，解释为什么两者不同。</p></details>
+<details><summary>03 · 持有一天与持有一个月</summary><p>列出价差、融资、basis、到期/换约、股息、适用借券费和汇兑。</p><p class="exercise">练习：为模拟持仓的 1、7、30 天分别列费用清单，标出哪些费率仍未知，不能当零。</p></details>
+<details><summary>04 · 用指标描述，不用指标许愿</summary><p>观察同一段小时图与日图的 EMA、ATR、区间和 RSI，解释冲突。</p><p class="exercise">练习：只写当前状态、可能情景和失效条件，不写“必涨”“必跌”或未经验证的概率。</p></details>
+<details><summary>05 · 多笔仓位与联合冲击</summary><p>按产品合并仓位，分清总额与净额、价格因子和结算货币因子。</p><p class="exercise">练习：将相同产品的五笔教学仓位聚合，分别施加单品、共同价格和 FX 冲击。</p></details>
+<details><summary>06 · 验证 Forecast</summary><p>固定规则与期限，先记录再等结果，按时间做未见样本评估。</p><p class="exercise">练习：到期核对区间是否覆盖、宽度是否有用，并与简单基准比较；保留失败案例。</p></details></section>
+
+<section class="guide-section" id="sources"><h2>来源与适用范围</h2><p class="small">以下为官方资料或作者原著，检索核验日：2026-10-17。地区页面用于说明机制；实际费率、保证金、负余额保护和强平资格仍以本人开户实体、协议及具体产品为准。</p><ol class="sources">
+<li id="s1"><a href="https://labs.ig.com/reference/markets-epic.html" target="_blank" rel="noopener noreferrer">IG Labs · 市场产品详情</a>：点值、单位、币种、保证金分档、到期与换约字段。</li>
+<li id="s2"><a href="https://labs.ig.com/reference/positions.html" target="_blank" rel="noopener noreferrer">IG Labs · 持仓</a>：方向、数量、币种、开仓时间、止损与报价字段。</li>
+<li id="s3"><a href="https://labs.ig.com/reference/prices-epic.html" target="_blank" rel="noopener noreferrer">IG Labs · 历史价格</a>：Bid/Ask OHLC、UTC、配额及 lastTradedVolume 的限制。</li>
+<li id="s4"><a href="https://www.ig.com/en/charges" target="_blank" rel="noopener noreferrer">IG International · 费用</a>：价差、融资、换算及期货型定价成本机制。</li>
+<li id="s5"><a href="https://www.ig.com/ae/help-and-support/articles/597576-how-are-spot-commodities-priced-and-how-is-my-overnight-funding-calculated" target="_blank" rel="noopener noreferrer">IG AE · 现货商品定价与隔夜调整</a>：相邻期货、basis 与收费的区分。</li>
+<li id="s6"><a href="https://www.ig.com/en/risk-management" target="_blank" rel="noopener noreferrer">IG International · 风险管理</a>：杠杆、保证金、止损及相关限制。</li>
+<li id="s7"><a href="https://www.ig.com/en/help-and-support/articles/691514-what-are-ig-s-shares-and-etf-cfd-product-details" target="_blank" rel="noopener noreferrer">IG · 股票与 ETF CFD 详情</a>：股息、公司行动及适用股票空头费用。</li>
+<li id="s8"><a href="https://www.fca.org.uk/publications/policy-statements/ps19-18-restricting-contract-difference-products" target="_blank" rel="noopener noreferrer">FCA · CFD 零售限制</a>：监管规则有具体地域与客户适用范围。</li>
+<li id="s9"><a href="https://www.hkma.gov.hk/eng/key-functions/money/linked-exchange-rate-system/" target="_blank" rel="noopener noreferrer">香港金管局 · 联系汇率制度</a>：HKD/USD 制度背景。</li>
+<li id="s10"><a href="https://otexts.com/fpp3/toolbox.html" target="_blank" rel="noopener noreferrer">Hyndman / Athanasopoulos · Forecasting: Principles and Practice</a>：预测区间、简单基准、分布评估和时间序列验证。</li>
+<li id="s11"><a href="https://www.eia.gov/petroleum/supply/weekly/schedule.php" target="_blank" rel="noopener noreferrer">EIA · 周度石油报告日程</a>：官方发布时间与假期安排。</li>
+<li id="s12"><a href="https://www.boj.or.jp/en/mopo/mpmsche_minu/index.htm" target="_blank" rel="noopener noreferrer">日本银行 · 货币政策会议资料</a>：会议、展望、意见摘要及纪要日程。</li>
+</ol></section>
+<footer class="guide-footer">Harbour · CFD 与量化监控实施版 2 · 2026-10-19 · 学习与产品规划材料 · 实际监控状态以账户页面为准。</footer>
+</main></body></html>

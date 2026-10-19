@@ -6,6 +6,7 @@
   <title>Harbour · IG CFD 账户监控</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css">
   <script src="/vendor/lightweight-charts.standalone.production.js" defer></script>
+  <link rel="stylesheet" href="/risk-ui.css">
   <script type="module" src="/live.js"></script>
 </head>
 <body>
@@ -20,10 +21,11 @@
     <a href="#charts" data-nav="charts"><span class="nav-icon">⌁</span>图表与画图</a>
     <a href="#ledger" data-nav="ledger"><span class="nav-icon">≡</span>交易与流水</a>
     <a href="#news" data-nav="news"><span class="nav-icon">◷</span>新闻与事件</a>
+    <a href="#quant" data-nav="quant"><span class="nav-icon">∿</span>仓位风险与量化</a>
     <a href="#risk" data-nav="risk"><span class="nav-icon">◇</span>风险与连接</a>
   </nav>
   <div class="side-bottom">
-    <div class="capital-note"><span>初始投入 · HKD</span><strong>30,000<span>.00</span></strong><small>累计亏损提醒线 <b>60%</b></small></div>
+    <div class="capital-note"><span>已核验入金 · HKD</span><strong id="funding-total">待核验</strong><small>累计亏损提醒线 <b>60%</b></small></div>
     <div class="owner"><div class="avatar">Z</div><div><strong>个人 CFD 账户</strong><small>公开展示方案 · 仅供查看</small></div></div>
     <div class="side-version"><span class="dot"></span>LIVE MONITOR <span>v1.0</span></div>
   </div>
