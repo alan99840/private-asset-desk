@@ -1,0 +1,20 @@
+{
+  "name": "harbour-tradingview-reference",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && node build.mjs"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-ts-tradingview-widgets": "1.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.20",
+    "@types/react-dom": "18.3.6",
+    "esbuild": "0.25.5",
+    "typescript": "5.8.3"
+  }
+}
