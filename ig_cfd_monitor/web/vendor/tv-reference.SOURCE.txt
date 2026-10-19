@@ -1,0 +1,11 @@
+Harbour TradingView reference island
+Source: frontend/src/TradingViewReference.tsx
+Build: cd frontend && pnpm install --frozen-lockfile && pnpm run build
+React 18.3.1: https://registry.npmjs.org/react/-/react-18.3.1.tgz
+React DOM 18.3.1: https://registry.npmjs.org/react-dom/-/react-dom-18.3.1.tgz
+react-ts-tradingview-widgets 1.2.8: https://registry.npmjs.org/react-ts-tradingview-widgets/-/react-ts-tradingview-widgets-1.2.8.tgz
+Upstream: https://github.com/JorrinKievit/react-ts-tradingview-widgets
+Exact dependency integrity hashes are in frontend/pnpm-lock.yaml.
+The npm metadata says ISC; its distributed LICENSE is MIT and is retained verbatim.
+Only public symbol/interval/style query parameters enter this opaque-origin sandbox.
+TradingView scripts and data are loaded on demand from TradingView; they are not included in this bundle.
