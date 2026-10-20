@@ -23,7 +23,7 @@ def main():
  if existing.returncode==0:subprocess.run(['launchctl','bootout',target],check=True)
  RUNTIME.mkdir(mode=0o700,parents=True,exist_ok=True);os.chmod(RUNTIME,0o700)
  if ROOT!=RUNTIME:
-  for name in ('credentials.py','accounts.py','ig_client.py','runtime.py','storage.py','cashflows.py','position_summary.py','quant.py','events_calendar.py','calendar_seed.json','risk.py','news.py','server.py','setup_server.py','service.py','requirements.txt','chart_history.py','trade_markers.py'):
+  for name in ('credentials.py','accounts.py','ig_client.py','runtime.py','storage.py','cashflows.py','position_summary.py','quant.py','market_sessions.py','events_calendar.py','calendar_seed.json','risk.py','news.py','server.py','setup_server.py','service.py','requirements.txt','chart_history.py','trade_markers.py'):
    shutil.copy2(ROOT/name,RUNTIME/name)
   for name in ('web','setup'):
    shutil.copytree(ROOT/name,RUNTIME/name,dirs_exist_ok=True,symlinks=True)

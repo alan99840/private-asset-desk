@@ -64,5 +64,9 @@
   "accounts.py",
   "web/account-ui.js",
   "tests/test_accounts.py",
-  "tests/test-accounts-ui.mjs"
+  "tests/test-accounts-ui.mjs",
+  "market_sessions.py",
+  "tests/test_market_sessions.py",
+  "tests/test-profit-ui.mjs",
+  "TRADING_SESSIONS.md"
 ]

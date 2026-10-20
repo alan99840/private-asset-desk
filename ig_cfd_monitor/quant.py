@@ -10,6 +10,7 @@ import time
 from datetime import datetime, timezone
 from cashflows import currency
 from chart_history import RESOLUTIONS, ChartError
+from market_sessions import describe, gap_details, open_seconds
 
 
 def num(value):
@@ -35,7 +36,7 @@ def wilder(values, period=14):
     return result
 
 
-def indicators(candles, resolution, epoch=None):
+def indicators(candles, resolution, epoch=None, epic=None):
     epoch=time.time() if epoch is None else epoch
     # A subsequent bar proves the previous bar closed. The unconfirmed tail is
     # always excluded, including daily/weekly/monthly bars and closed markets.
@@ -46,8 +47,10 @@ def indicators(candles, resolution, epoch=None):
          'basis':'completed_observed_bid_bars','unexplained_gaps':0,'session_gaps':0,
          'ema20':None,'ema50':None,'atr14':None,'rsi14':None,
          'high20':None,'low20':None,'high60':None,'low60':None,'regime':'WAIT',
-         'conditions':[]}
-    if len(bars)<61:return out
+         'conditions':[], 'reasons':[], 'session':describe(epic, epoch), 'gaps':[]}
+    if len(bars)<61:
+        out['reasons'].append({'code':'insufficient_bars','message':f'需要至少 61 根已确认收盘 K 线，当前 {len(bars)} 根；末根未确认，已排除。'})
+        return out
     closes=[b['close'] for b in bars]
     tr=[max(b['high']-b['low'],abs(b['high']-bars[i-1]['close']),abs(b['low']-bars[i-1]['close'])) for i,b in enumerate(bars) if i]
     changes=[b-a for a,b in zip(closes,closes[1:])]
@@ -58,17 +61,25 @@ def indicators(candles, resolution, epoch=None):
                low20=min(b['low'] for b in bars[-21:-1]),high60=max(b['high'] for b in bars[-61:-1]),
                low60=min(b['low'] for b in bars[-61:-1]))
     step=RESOLUTIONS[resolution]
-    for a,b in zip(bars[-61:],bars[-60:]):
-        gap=b['time']-a['time']
-        if resolution!='MONTH' and gap>step*1.5:
-            # Weekend-containing gaps remain identified as possible sessions,
-            # not silently certified complete without the broker's calendar.
-            days=range(int(a['time']//86400),int(b['time']//86400)+1)
-            weekend=any(datetime.fromtimestamp(d*86400,timezone.utc).weekday()>=5 for d in days)
-            out['session_gaps' if weekend else 'unexplained_gaps']+=1
+    out['gaps']=gap_details(epic,bars,resolution,step)
+    for gap in out['gaps']:
+        out['session_gaps' if gap['kind']=='session' else 'unexplained_gaps']+=1
+    if out['unexplained_gaps']:
+        out['reasons'].append({'code':'unexplained_gaps','message':f"最近 61 根内有 {out['unexplained_gaps']} 段缺口未被常规休市规则解释；可能缺行情或有特殊休市，暂停条件结论。"})
     out['bar_age_seconds']=epoch-bars[-1]['time']
-    out['stale_bars']=out['bar_age_seconds']>({'DAY':5*86400,'WEEK':16*86400,'MONTH':70*86400}.get(resolution,step*3))
-    out['status']='LIMITED' if out['unexplained_gaps'] or out['stale_bars'] else 'READY'
+    trading_age=open_seconds(epic,bars[-1]['time'],epoch) if step<86400 else None
+    out['open_age_seconds']=trading_age
+    age=out['bar_age_seconds'] if trading_age is None else trading_age
+    out['stale_bars']=age>({'DAY':5*86400,'WEEK':16*86400,'MONTH':70*86400}.get(resolution,step*3))
+    if out['stale_bars']:
+        out['reasons'].append({'code':'stale_bars','message':'已收盘 K 线过旧；扣除已匹配常规休市后仍超出更新容限，等待历史行情刷新。' if trading_age is not None else '已收盘 K 线过旧，且没有适用的日内休市校正；等待历史行情刷新。'})
+    # A bar fully inside a reference closure invalidates that calendar for this
+    # sample. A changed broker schedule must not hide genuine missing data.
+    conflicts=[b['time'] for b in bars[-61:] if step<86400 and open_seconds(epic,b['time'],b['time']+step)==0]
+    if conflicts:
+        out['reasons'].append({'code':'session_conflict','message':'实际 K 线出现在参考休市时段，时段规则需要重新核验，暂停条件结论。'})
+    out['session_conflicts']=conflicts
+    out['status']='LIMITED' if out['reasons'] else 'READY'
     close=out['close'];fast=out['ema20'];slow=out['ema50']
     out['regime']='UP' if close>fast>slow else 'DOWN' if close<fast<slow else 'RANGE'
     out['conditions']=[
@@ -231,12 +242,23 @@ class Analytics:
         for e in held:
             try:
                 history=self.charts.get(e,resolution);candles=history['candles']
-                raw[e]=candles;signals[e]=indicators(candles,resolution)
+                raw[e]=candles;signals[e]=indicators(candles,resolution,epic=e)
                 signals[e]['cache_status']=history['status'];signals[e]['updated_at']=history.get('updated_at')
                 signals[e]['cache_error']=history.get('error');charts_status[e]=history['status']
-                if history['status']!='ready' and signals[e]['status']=='READY':signals[e].update(status='LIMITED',regime='WAIT',conditions=[])
+                if history.get('skipped_rows'):
+                    signals[e]['reasons'].append({'code':'invalid_ohlc','message':f"IG 最近返回 {history['skipped_rows']} 条无有效 UTC 或 Bid OHLC 的记录，已跳过；等待完整数据核对。"})
+                    if signals[e]['status']=='READY':signals[e].update(status='LIMITED',regime='WAIT',conditions=[])
+                if history['status']!='ready' or history.get('error'):
+                    reason=history.get('error') or history['status']
+                    message=('IG 历史行情配额受限，保留缓存并等待额度恢复。' if 'allowance' in str(reason) or 'quota' in str(reason) else
+                             '历史行情正在读取或刷新，等待本次请求完成。' if history['status'] in ('loading','refreshing','queued') else
+                             '历史行情尚未就绪或读取失败，保留缓存，暂停条件结论。')
+                    signals[e]['reasons'].append({'code':'history_not_ready','message':history.get('message') or message,'detail':str(reason)})
+                    if signals[e]['status']=='READY':signals[e].update(status='LIMITED',regime='WAIT',conditions=[])
             except ChartError as exc:
-                signals[e]={'status':'UNAVAILABLE','error':exc.code,'resolution':resolution,'conditions':[]}
+                signals[e]={'status':'UNAVAILABLE','error':exc.code,'resolution':resolution,'conditions':[],
+                            'reasons':[{'code':'history_unavailable','message':'无法读取此合约历史行情。','detail':exc.code}],
+                            'session':describe(e,time.time())}
         book=portfolio(state,signals)
         correlations=[]
         for i,a in enumerate(held):
