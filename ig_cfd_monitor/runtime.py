@@ -6,7 +6,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
-from credentials import load_credentials, private_json, STATE
+from credentials import load_credentials, private_json, STATE, profile_directory
 from ig_client import IGClient, IGError
 from risk import evaluate_loss
 from cashflows import money, currency, classify, ledger_summary
@@ -50,8 +50,12 @@ class Monitor:
     STREAM_RETRY_GRACE=30
     STREAM_RETRY_CAP=300
 
-    def __init__(self):
-        self.lock=threading.RLock();self.state=base_state();self.store=Store()
+    def __init__(self, profile_id='default', feed_source=None):
+        self.profile_id=profile_id;self.feed_source=feed_source
+        directory=profile_directory(profile_id)
+        if profile_id!='default':directory.mkdir(mode=0o700,parents=True,exist_ok=True)
+        self.lock=threading.RLock();self.state=base_state()
+        self.store=Store() if profile_id=='default' else Store(directory/'monitor.sqlite3')
         self.client=None;self.stream=None;self.subscribe=None;self.price_sub=None
         self.scope=None;self.creds=None;self.generation=0;self.quotes={};self.market_info={}
         self.watch=[];self.subscribed=[];self.refresh=threading.Event();self.stop=threading.Event()
@@ -143,6 +147,7 @@ class Monitor:
     def start(self):
         self.status('waiting_for_credentials','请在本机配置页填写 IG API 信息。')
         threading.Thread(target=self.run,daemon=True,name='ig-collector').start()
+        if self.feed_source is not None:return
         from news import collect_news
         threading.Thread(target=collect_news,args=(self,),daemon=True,name='official-news').start()
         from events_calendar import collect_calendar
@@ -150,7 +155,7 @@ class Monitor:
 
     def status(self,status,message='',accounts=None):
         with self.lock:self.state.update(status=status,message=message)
-        private_json(STATE/'connection_status.json',{'status':status,'message':message,'at':now(),
+        private_json(profile_directory(self.profile_id)/'connection_status.json',{'status':status,'message':message,'at':now(),
           'accounts':[{k:a.get(k) for k in ('accountId','accountType','currency','status')} for a in accounts or []]})
 
     def reset(self,creds):
@@ -432,8 +437,16 @@ class Monitor:
             self.cost_summary=ledger_summary(self.store.events(self.scope,'transactions'))
 
     def project(self):
+        if self.feed_source is not None:
+            with self.feed_source.lock:
+                feeds=copy.deepcopy(self.feed_source.state)
+            with self.lock:self.state.update(feeds)
         with self.lock:
             out=copy.deepcopy(self.state);out['generated_at']=now();out['markets']=[]
+            out['profile']={'id':self.profile_id,
+                'name':(self.creds or {}).get('name','主账户' if self.profile_id=='default' else 'IG 账户'),
+                'enabled':(self.creds or {}).get('enabled',True),'configured':bool(self.creds),
+                'environment':(self.creds or {}).get('environment')}
             for epic,m in self.market_info.items():
                 q=self.quotes.get(epic)
                 quote=copy.deepcopy(q) if q else {'bid':number(m.get('bid')),'ask':number(m.get('offer')),
@@ -493,10 +506,13 @@ class Monitor:
         previous=None
         while not self.stop.wait(1):
             try:
-                c=load_credentials();revision=c.get('saved_at') if c else None
+                c=load_credentials(self.profile_id);revision=c.get('saved_at') if c else None
                 if revision!=previous:self.reset(c);previous=revision
                 if not c:
                     if self.state['status']!='waiting_for_credentials':self.status('waiting_for_credentials')
+                    continue
+                if not c.get('enabled',True):
+                    if self.state['status']!='paused':self.status('paused','此账户已在本机暂停监控。')
                     continue
                 if not self.client:
                     if time.time()>=self.retry_at:self.connect()

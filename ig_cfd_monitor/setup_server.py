@@ -4,12 +4,23 @@ import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
-from credentials import save_credentials, credential_status, STATE
+from credentials import save_credentials, credential_status, STATE, profile_ids, profile_directory
 
 PORT = 8787
 ORIGIN = f'http://127.0.0.1:{PORT}'
 CSRF = secrets.token_urlsafe(32)
 ROOT = Path(__file__).resolve().parent
+
+
+def profile_status(profile_id):
+    status = credential_status(profile_id)
+    try:
+        connection = json.loads((profile_directory(profile_id)/'connection_status.json').read_text())
+    except (OSError, ValueError):
+        connection = {'status': 'waiting_for_service'}
+    if not status.get('enabled', True):
+        connection = {'status': 'paused', 'message': '此账户已暂停监控。'}
+    return {'credentials': status, 'connection': connection}
 
 
 class SetupHandler(BaseHTTPRequestHandler):
@@ -55,12 +66,9 @@ class SetupHandler(BaseHTTPRequestHandler):
         elif path in ('/setup.js','/setup.css'):
             self.reply((ROOT/'setup'/path[1:]).read_bytes(), mime='text/javascript' if path.endswith('.js') else 'text/css')
         elif path == '/api/status':
-            status = credential_status()
-            try:
-                connection = json.loads((STATE/'connection_status.json').read_text())
-            except (OSError, ValueError):
-                connection = {'status': 'waiting_for_service'}
-            self.reply({'credentials': status, 'connection': connection})
+            self.reply(profile_status('default'))
+        elif path == '/api/profiles':
+            self.reply({'profiles': [profile_status(p) for p in profile_ids()]})
         else:
             self.reply({'error':'not_found'},404)
 
@@ -78,8 +86,9 @@ class SetupHandler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(size))
             if not isinstance(payload, dict):
                 raise ValueError('配置格式错误。')
-            save_credentials(payload)
-            self.reply({'ok':True,'message':'已保存到本机。后台会自动尝试连接；下面会显示连接结果。'})
+            profile_id = save_credentials(payload)
+            self.reply({'ok':True,'profile_id':profile_id,
+                        'message':'已保存到本机。后台会自动应用此账户配置；下方显示各账户连接结果。'})
         except (ValueError, OSError) as e:
             self.reply({'error':str(e) if isinstance(e,ValueError) and not isinstance(e,json.JSONDecodeError) else '保存失败，请检查输入。'},400)
 

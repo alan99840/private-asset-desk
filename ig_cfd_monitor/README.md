@@ -155,3 +155,20 @@ python3 export_source.py
 - https://labs.ig.com/reference/history-transactions.html
 - https://lightstreamer.com/share/ig/
 - https://tailscale.com/docs/features/tailscale-funnel
+
+
+## 多个独立 IG 登录账户
+
+在运行后台的 Mac 打开 `http://127.0.0.1:8787/`，点击“新增账户”。填写显示名称、Live/Demo、该登录名自己的 API Key、IG Identifier、密码、历史记录起始日；有多个 HKD CFD 子账户时指定 Account ID。保存后后台自动发现并连接，无需重启。最多保留 8 个配置，当前支持不同登录名的 HKD CFD 账户。同一环境下的重复登录名或 API Key 会被拒绝，避免重复登录与订阅。
+
+- 原账户保留 `state/credentials.json`、`monitor.sqlite3`、`charts.sqlite3`，无破坏性迁移。
+- 新账户使用随机配置 ID，在 `state/profiles/<id>/` 内分别保存权限受限的凭据、连接状态、流水/日线与 K 线/标注数据库。API Key、用户名、密码和会话 token 不进入公开 API 或 GitHub 导出。
+- 编辑现有配置时，密钥、用户名、密码留空即保留；环境或登录主体变更必须新增账户。取消“启用”可暂停该账户，保留历史。每个账户拥有独立的 REST 限速器和一条行情连接，共享官方新闻/日历采集。
+- 看板顶部账户菜单按 `?account=<id>` 切换整个页面；状态、SSE、流水、CSV、量化、K 线、成交标记、标注读写都按 `profile` 路由。未知 ID 返回 404，不回退至主账户。页面切换会清理旧账户请求和内存状态；未保存的画线保留浏览器离页提示。
+- “多账户总览”每 5 秒检查全部账户，Live/Demo 分开。只在同环境的全部已启用账户资金新鲜且币种为 HKD 时合计资金；入金基准未核验时不合计入金。暂停账户不计入汇总。合计资金不能用于跨账户抵扣保证金。
+- 各账户独立使用其已核验累计入金计算 60% 亏损线；不把主账户 HKD 30,000 套到其他账户。顶部会提示任何账户触线或待核验。仍只读，所有交易继续在 IG 手动完成。
+- 所有配置账户沿用现有分享链接和访问密码；没有分用户可见范围。新增真实账户需要用户在本机填写凭据，合成测试不代表第二个真实登录已经成功。
+
+验证：`python -m unittest discover -s tests -p 'test*.py'`；Node 运行 `tests/test-accounts-ui.mjs`、`tests/test-chart-ui.mjs`、`tests/test-risk-ui.mjs`。多账户测试覆盖身份/密钥去重、暂停、数据/画线隔离、各 API 的账户路由、真实/模拟分离、过期汇总门控和独立亏损提醒。
+
+IG 官方说明：[REST 认证与账户 token](https://labs.ig.com/rest-trading-api-guide.html)、[订阅连接与限制](https://labs.ig.com/streaming-api-guide.html)、[API 默认配额](https://labs.ig.com/faq.html)。多个独立客户连接分别受自己的权限和配额约束；不通过重复连接同一 API Key 提高配额。

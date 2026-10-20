@@ -25,6 +25,7 @@ ROOT=Path(__file__).resolve().parent
 ASSETS={'/':('index.html','text/html; charset=utf-8'),'/index.html':('index.html','text/html; charset=utf-8'),
  '/style.css':('style.css','text/css; charset=utf-8'),'/live.js':('live.js','text/javascript; charset=utf-8'),
  '/favicon.svg':('favicon.svg','image/svg+xml'),'/charts.js':('charts.js','text/javascript; charset=utf-8'),
+ '/account-ui.js':('account-ui.js','text/javascript; charset=utf-8'),
  '/risk-ui.js':('risk-ui.js','text/javascript; charset=utf-8'),
  '/risk-ui.css':('risk-ui.css','text/css; charset=utf-8'),
  '/cfd-guide.html':('cfd-guide.html','text/html; charset=utf-8'),'/cfd-guide.css':('cfd-guide.css','text/css; charset=utf-8'),
@@ -38,6 +39,7 @@ MONITOR=None
 CHARTS=None
 TRADES=None
 ANALYTICS=None
+FLEET=None
 ACCESS_FILE=ROOT/'state'/'viewer_access.json'
 COOKIE='harbour_viewer'
 SESSION_SECONDS=12*60*60
@@ -124,6 +126,18 @@ class Handler(BaseHTTPRequestHandler):
             self.reply({'error':'authentication_required'},401)
         else:self.login_page()
         return False
+    def account_context(self, uri):
+        query=parse_qs(uri.query,keep_blank_values=True,max_num_fields=12)
+        ids=query.pop('profile',['default'])
+        if len(ids)!=1 or not ids[0]:raise ChartError('invalid_profile')
+        # Strip only the routing field; endpoint-specific validation stays intact.
+        from urllib.parse import urlencode
+        uri=uri._replace(query=urlencode(query,doseq=True))
+        if FLEET is not None:
+            b=FLEET.get(ids[0]);return uri,b.monitor,b.charts,b.trades,b.analytics
+        if ids[0]!='default':raise ChartError('account_profile_not_found',404)
+        return uri,MONITOR,CHARTS,TRADES,ANALYTICS
+
     def do_GET(self):
         uri=urlsplit(self.path)
         try:
@@ -134,9 +148,14 @@ class Handler(BaseHTTPRequestHandler):
                 filename,mime=ASSETS[TV_PUBLIC_BUNDLE]
                 self.reply((ROOT/'web'/filename).read_bytes(),mime=mime);return
             if not self.authorize(uri.path):return
+            monitor,charts,trades,analytics=MONITOR,CHARTS,TRADES,ANALYTICS
+            if uri.path.startswith('/api/') and uri.path!='/api/accounts':
+                uri,monitor,charts,trades,analytics=self.account_context(uri)
             if uri.path in ASSETS:
                 filename,mime=ASSETS[uri.path];self.reply((ROOT/'web'/filename).read_bytes(),mime=mime,isolated_widget=uri.path==TV_DOCUMENT)
-            elif uri.path=='/api/state':self.reply(MONITOR.project())
+            elif uri.path=='/api/accounts':
+                self.reply(FLEET.overview() if FLEET else {'profiles':[],'totals':[]})
+            elif uri.path=='/api/state':self.reply(monitor.project())
             elif uri.path=='/api/analytics':
                 query=parse_qs(uri.query,max_num_fields=7)
                 if any(len(v)!=1 for v in query.values()) or set(query)-{'resolution','mode','shock','fx','spread','cost','epic'}:raise ChartError('invalid_query')
@@ -146,30 +165,30 @@ class Handler(BaseHTTPRequestHandler):
                 if shock is None or not -100000<=shock<=100000 or fx is None or not -50<=fx<=50 or spread is None or not 1<=spread<=20 or cost is None or not 0<=cost<=10000000:raise ChartError('invalid_scenario')
                 if mode in ('atr','adverse') and abs(shock)>10:raise ChartError('invalid_scenario')
                 if mode=='percent' and abs(shock)>100:raise ChartError('invalid_scenario')
-                self.reply(ANALYTICS.get(resolution,mode,shock,fx,spread,cost,query.get('epic',[None])[0]))
+                self.reply(analytics.get(resolution,mode,shock,fx,spread,cost,query.get('epic',[None])[0]))
             elif uri.path=='/api/chart':
                 query=parse_qs(uri.query,max_num_fields=5)
                 if any(len(values)!=1 for values in query.values()) or set(query)-{'epic','resolution','before','cursor'}:
                     raise ChartError('invalid_query')
                 before=int(query['before'][0]) if 'before' in query else None
-                self.reply(CHARTS.get(query.get('epic',[''])[0],query.get('resolution',[''])[0],before,query.get('cursor',[None])[0]))
+                self.reply(charts.get(query.get('epic',[''])[0],query.get('resolution',[''])[0],before,query.get('cursor',[None])[0]))
             elif uri.path=='/api/chart/drawings':
                 query=parse_qs(uri.query,max_num_fields=2)
                 if set(query)!={'epic'} or len(query['epic'])!=1:raise ChartError('invalid_query')
-                self.reply(CHARTS.drawings(query['epic'][0]))
+                self.reply(charts.drawings(query['epic'][0]))
             elif uri.path=='/api/chart/trades':
                 query=parse_qs(uri.query,max_num_fields=2)
                 if set(query)!={'epic'} or len(query['epic'])!=1:raise ChartError('invalid_query')
-                self.reply(TRADES.get(query['epic'][0]))
+                self.reply(trades.get(query['epic'][0]))
             elif uri.path=='/api/ledger':
                 query=parse_qs(uri.query);page=max(1,min(100000,int(query.get('page',['1'])[0])))
-                rows=MONITOR.ledger();kind=query.get('kind',['all'])[0]
+                rows=monitor.ledger();kind=query.get('kind',['all'])[0]
                 if kind!='all':rows=[r for r in rows if r['kind']==kind]
-                self.reply({'rows':rows[(page-1)*50:page*50],'page':page,'total':len(rows),'page_size':50,'history':MONITOR.project()['history']})
+                self.reply({'rows':rows[(page-1)*50:page*50],'page':page,'total':len(rows),'page_size':50,'history':monitor.project()['history']})
             elif uri.path=='/api/ledger.csv':
                 stream=io.StringIO();fields=['kind','at','reference','type','name','amount','currency','size','open','close','status','description']
                 writer=csv.writer(stream);writer.writerow(fields)
-                for row in MONITOR.ledger():
+                for row in monitor.ledger():
                     cells=[]
                     for key in fields:
                         v=str(row.get(key) or '')
@@ -177,18 +196,17 @@ class Handler(BaseHTTPRequestHandler):
                         cells.append(v)
                     writer.writerow(cells)
                 self.reply(('\ufeff'+stream.getvalue()).encode(),mime='text/csv; charset=utf-8')
-            elif uri.path=='/api/events' and self.command!='HEAD':self.events()
+            elif uri.path=='/api/events' and self.command!='HEAD':self.events(monitor)
             else:self.reply({'error':'not_found'},404)
         except (BrokenPipeError,ConnectionResetError,TimeoutError):pass
         except ChartError as exc:self.reply({'error':exc.code},exc.status)
         except ValueError:self.reply({'error':'invalid_query'},400)
     do_HEAD=do_GET
-    def events(self):
+    def events(self,monitor):
         if not SLOTS.acquire(blocking=False):self.reply({'error':'capacity'},503);return
         try:
             # Keep this stream bound to the monitor that accepted it, including
             # while a test server is being torn down or replaced.
-            monitor=MONITOR
             self.connection.settimeout(15);self.headers_for('text/event-stream; charset=utf-8')
             # IG ticks are projected to browsers at up to 4 Hz. No REST requests per viewer.
             end=time.monotonic()+55;last='';last_heartbeat=0
@@ -238,6 +256,7 @@ class Handler(BaseHTTPRequestHandler):
         if uri.path!='/api/chart/drawings':self.reject();return
         try:
             if not self.authorize(uri.path):return
+            uri,monitor,charts,trades,analytics=self.account_context(uri)
             self.connection.settimeout(5)
             origin=urlsplit(self.headers.get('Origin',''))
             # Shared drawings change local annotations only. Require a real
@@ -254,7 +273,7 @@ class Handler(BaseHTTPRequestHandler):
             body=json.loads(self.rfile.read(length).decode('utf-8'))
             if not isinstance(body,dict) or set(body)!={'epic','revision','drawings'} or body['epic']!=query['epic'][0]:
                 raise ChartError('invalid_drawing_request')
-            payload,saved=CHARTS.save_drawings(body['epic'],body['revision'],body['drawings'])
+            payload,saved=charts.save_drawings(body['epic'],body['revision'],body['drawings'])
             if not saved:payload['error']='drawing_revision_conflict'
             self.reply(payload,200 if saved else 409)
         except ChartError as exc:self.reply({'error':exc.code},exc.status)
@@ -264,14 +283,16 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    global MONITOR,CHARTS,TRADES,ANALYTICS
+    global MONITOR,CHARTS,TRADES,ANALYTICS,FLEET
     parser=argparse.ArgumentParser();parser.add_argument('--port',type=int,default=8786);parser.add_argument('--set-password',action='store_true');args=parser.parse_args()
     if args.set_password:
         from getpass import getpass
         password=getpass('Viewer password: ')
         if password!=getpass('Confirm password: '):raise SystemExit('Passwords do not match.')
         set_viewer_password(password);print('Viewer password saved. Existing sessions are invalidated.');return
-    MONITOR=Monitor();MONITOR.start();CHARTS=ChartHistory(MONITOR);TRADES=TradeMarkers(MONITOR);ANALYTICS=Analytics(MONITOR,CHARTS)
+    from accounts import AccountFleet
+    FLEET=AccountFleet();FLEET.start()
+    default=FLEET.get('default');MONITOR=default.monitor;CHARTS=default.charts;TRADES=default.trades;ANALYTICS=default.analytics
     print(f'Harbour read-only monitor: http://127.0.0.1:{args.port}',flush=True)
     ThreadingHTTPServer(('127.0.0.1',args.port),Handler).serve_forever()
 
