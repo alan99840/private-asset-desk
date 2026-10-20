@@ -15,6 +15,7 @@
   <a class="brand" href="#overview"><img src="/favicon.svg" alt="" width="40" height="40"><span>HARBOUR<small>私人资产观察室</small></span></a>
   <div class="workspace-label">CFD MONITOR <span>01</span></div>
   <nav aria-label="主要导航">
+    <a href="#accounts" data-nav="accounts"><span class="nav-icon">▥</span>多账户总览</a>
     <a href="#overview" data-nav="overview"><span class="nav-icon">▦</span>账户总览</a>
     <a href="#markets" data-nav="markets"><span class="nav-icon">⌁</span>市场观察</a>
     <a href="#positions" data-nav="positions"><span class="nav-icon">▤</span>当前持仓<span class="nav-count" id="position-count">—</span></a>
@@ -31,7 +32,7 @@
   </div>
 </aside>
 <div class="app-shell">
-  <div class="topbar"><div class="breadcrumb">资产监控 <span>/</span> <strong id="crumb">账户总览</strong></div><div class="top-actions"><span class="currency">HKD 本位</span><span class="readonly">只读</span><button id="connection-button" class="connection"><span class="dot amber"></span>IG 未连接</button></div></div>
+  <div class="topbar"><div class="breadcrumb">资产监控 <span>/</span> <strong id="crumb">账户总览</strong></div><div class="top-actions"><label class="account-switcher">当前账户 <select id="account-select" aria-label="当前账户"><option value="default">主账户</option></select></label><a id="accounts-health" href="#accounts" class="fleet-health">全部账户</a><span class="currency">HKD 本位</span><span class="readonly">只读</span><button id="connection-button" class="connection"><span class="dot amber"></span>IG 未连接</button></div></div>
   <main id="main" tabindex="-1">
     <header class="page-header"><div><div class="eyebrow">YOUR CAPITAL, IN PERSPECTIVE</div><h1 id="page-title">账户总览</h1><p id="page-description">把权益、持仓与风险放在同一个视野。</p></div><div class="page-tools"><span class="pill outline" id="live-clock">正在连接后台</span></div></header>
     <div id="preview-banner" class="preview-banner" role="status"></div>

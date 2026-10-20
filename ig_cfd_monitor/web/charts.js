@@ -1,3 +1,11 @@
+// The page URL pins every request to one account; switching reloads the page,
+// so in-flight replies, drafts and indicator state cannot cross account boundaries.
+export function accountURL(path){
+  const url=new URL(path,'http://harbour.local');
+  const id=typeof location==='undefined'?null:new URLSearchParams(location.search).get('account');
+  if(id&&id!=='default')url.searchParams.set('profile',id);
+  return url.pathname+url.search;
+}
 /* Harbour product charts. Prices are IG historical Bid bars, never synthetic candles. */
 export const RESOLUTIONS = [
   ['MINUTE','1 分钟',60],['MINUTE_5','5 分钟',300],['MINUTE_15','15 分钟',900],
@@ -224,7 +232,7 @@ class ProductCharts{
     const query=new URLSearchParams({epic,resolution});if(requested.before!=null)query.set('before',String(requested.before));if(requested.cursor)query.set('cursor',requested.cursor);this.abort=new AbortController();
     this.$('#chart-status').textContent=earlier?'正在读取更早历史…':this.candles.length?'正在核验历史缓存…':'正在向 IG 请求历史价格…';
     try{
-      const r=await fetch(`/api/chart?${query}`,{credentials:'same-origin',cache:'no-store',signal:this.abort.signal});const result=await r.json();if(token!==this.queryToken||this.destroyed)return;
+      const r=await fetch(accountURL(`/api/chart?${query}`),{credentials:'same-origin',cache:'no-store',signal:this.abort.signal});const result=await r.json();if(token!==this.queryToken||this.destroyed)return;
       if(!r.ok){if(r.status===401)throw Error('登录已过期，请刷新页面重新输入访问密码。');throw Error(result.message||result.error||`历史请求失败 (${r.status})`);}
       this.response=result;const candles=normalizeCandles(result.candles),lineRows=lineDataWithGaps(candles,result.gaps),old=this.candles,changed=JSON.stringify(candles)!==JSON.stringify(old)||JSON.stringify(lineRows.map(b=>b.time))!==JSON.stringify(this.timeline.map(b=>b.time));
       if(changed){const visible=this.chart.timeScale().getVisibleRange(),same=this.resKey===`${epic}/${resolution}`;this.candles=candles;this.timeline=lineRows;
@@ -266,7 +274,7 @@ class ProductCharts{
     if(!this.epic||this.destroyed||this.tradeLoading)return;const epic=this.epic,cached=this.tradeCache.get(epic);
     if(cached&&Date.now()-cached.at<60000){this.applyTrades(cached);return;}
     this.tradeLoading=true;const token=++this.tradeFetchToken;this.tradeAbort=new AbortController();this.tradeMessage='正在读取真实成交…';this.needsPaint=true;
-    try{const r=await fetch('/api/chart/trades?'+new URLSearchParams({epic}),{credentials:'same-origin',cache:'no-store',signal:this.tradeAbort.signal}),result=await r.json();if(this.destroyed||this.epic!==epic||token!==this.tradeFetchToken)return;
+    try{const r=await fetch(accountURL('/api/chart/trades?'+new URLSearchParams({epic})),{credentials:'same-origin',cache:'no-store',signal:this.tradeAbort.signal}),result=await r.json();if(this.destroyed||this.epic!==epic||token!==this.tradeFetchToken)return;
       if(!r.ok)throw Error(r.status===401?'登录已过期，请刷新页面重新登录。':result.message||result.error||'成交读取失败');if(result.epic!==epic)throw Error('成交产品与当前图表不一致');
       const normalized=normalizeTradeMarkers(result.markers),entry={...normalized,omitted:Array.isArray(result.omitted)?result.omitted.filter(o=>o&&Number.isInteger(o.count)&&o.count>0).map(o=>({count:o.count,message:typeof o.message==='string'?o.message.slice(0,200):'成交资料未能核对'})):[],message:typeof result.message==='string'?result.message.slice(0,400):'',at:Date.now()};this.tradeCache.set(epic,entry);this.applyTrades(entry);
     }catch(e){if(e.name!=='AbortError'&&!this.destroyed&&epic===this.epic&&token===this.tradeFetchToken){this.tradeMessage='成交点读取失败：'+(e.message||'请稍后重试');this.needsPaint=true;}}
@@ -321,13 +329,13 @@ class ProductCharts{
   async latestTrade(){const places=this.tradeMarkers.map(marker=>({marker,...this.tradePlacement(marker)})).filter(p=>p.logical!=null);if(!places.length)return;this.hideTradeTooltip();this.tradeVisible=true;this.$('#trade-markers-visible').checked=true;const last=places.at(-1),epic=this.epic,resolution=this.resolution,token=this.tradeLocateToken=(this.tradeLocateToken||0)+1,range=this.chart.timeScale().getVisibleLogicalRange(),width=Math.max(12,range?range.to-range.from:80);this.chart.timeScale().setVisibleLogicalRange({from:last.logical-width*.6,to:last.logical+width*.4});this.chart.priceScale('right').applyOptions({autoScale:true});this.refreshTradeScale();await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));if(this.destroyed||this.epic!==epic||this.resolution!==resolution||this.tradeLocateToken!==token)return;this.needsPaint=true;this.paint();const hits=this.tradePixels.filter(p=>p.marker.time===last.marker.time&&p.marker.price===last.marker.price);this.showTradeTooltip(hits,true);}
   async loadDrawings({discard=false}={}){
     if(!this.epic||this.destroyed||this.drawingLoadBusy)return;const epic=this.epic,state=stateFor(epic);if(state.dirty&&!discard)return;this.drawingLoadBusy=true;
-    try{const r=await fetch('/api/chart/drawings?'+new URLSearchParams({epic}),{credentials:'same-origin',cache:'no-store'});const result=await r.json();if(!r.ok)throw Error(result.message||result.error||'共享标注读取失败');if(state.dirty&&!discard)return;state.drawings=result.drawings||[];state.revision=result.revision;state.loaded=true;state.dirty=false;state.conflict=false;state.undo=[];state.redo=[];if(this.epic===epic){this.selected=null;this.drawMessage='';this.lastDrawFetch=Date.now();}}
+    try{const r=await fetch(accountURL('/api/chart/drawings?'+new URLSearchParams({epic})),{credentials:'same-origin',cache:'no-store'});const result=await r.json();if(!r.ok)throw Error(result.message||result.error||'共享标注读取失败');if(state.dirty&&!discard)return;state.drawings=result.drawings||[];state.revision=result.revision;state.loaded=true;state.dirty=false;state.conflict=false;state.undo=[];state.redo=[];if(this.epic===epic){this.selected=null;this.drawMessage='';this.lastDrawFetch=Date.now();}}
     catch(e){if(this.epic===epic)this.drawMessage=`共享标注读取失败：${e.message}。请点击重读后再编辑。`;}
     finally{this.drawingLoadBusy=false;if(!this.destroyed){this.drawingStatus();if(this.epic!==epic&&!this.drawState.loaded)this.loadDrawings();}}
   }
   async saveDrawings(){
     const state=this.drawState;if(!state?.loaded||!state.dirty||state.conflict||this.saving)return;const epic=this.epic,drawings=clone(state.drawings),revision=state.revision;this.saving=true;this.drawMessage='正在保存共享标注…';this.drawingStatus();
-    try{const r=await fetch('/api/chart/drawings?'+new URLSearchParams({epic}),{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({epic,revision,drawings})});const result=await r.json();if(r.status===409){state.conflict=true;throw Error('其他查看者已更新共享标注。本地改动仍保留；请先导出 PNG，再读取共享版本重新编辑。');}if(!r.ok)throw Error(result.message||result.error||'保存失败');state.revision=result.revision;state.dirty=JSON.stringify(drawings)!==JSON.stringify(state.drawings);state.loaded=true;if(this.epic===epic)this.drawMessage=state.dirty?'上次标注已保存，仍有新改动待保存。':'共享标注已保存。';}
+    try{const r=await fetch(accountURL('/api/chart/drawings?'+new URLSearchParams({epic})),{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({epic,revision,drawings})});const result=await r.json();if(r.status===409){state.conflict=true;throw Error('其他查看者已更新共享标注。本地改动仍保留；请先导出 PNG，再读取共享版本重新编辑。');}if(!r.ok)throw Error(result.message||result.error||'保存失败');state.revision=result.revision;state.dirty=JSON.stringify(drawings)!==JSON.stringify(state.drawings);state.loaded=true;if(this.epic===epic)this.drawMessage=state.dirty?'上次标注已保存，仍有新改动待保存。':'共享标注已保存。';}
     catch(e){if(this.epic===epic)this.drawMessage=e.message||'保存失败，本地标注仍保留。';}
     finally{this.saving=false;if(this.epic===epic&&!this.destroyed)this.drawingStatus();}
   }
