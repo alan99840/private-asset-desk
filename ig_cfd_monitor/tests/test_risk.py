@@ -35,6 +35,20 @@ class LossPolicyTests(unittest.TestCase):
         self.assertEqual(evaluate_loss(40000)["loss_fraction"], 0)
         self.assertEqual(evaluate_loss(-100)["status"], "TRIGGERED")
 
+    def test_profit_amount_percent_and_deposit_denominator(self):
+        for equity, deposits, profit, fraction in [
+            (33000, 30000, 3000, .1), (30000, 30000, 0, 0),
+            (12000, 30000, -18000, -.6), (44000, 40000, 4000, .1),
+            (-3000, 30000, -33000, -1.1),
+        ]:
+            result = evaluate_loss(equity, deposits)
+            self.assertEqual(result['profit_hkd'], profit)
+            self.assertEqual(result['profit_fraction'], fraction)
+        for result in [evaluate_loss(33000, 0), evaluate_loss(33000, age_seconds=31),
+                       evaluate_loss(None), evaluate_loss(33000, None)]:
+            self.assertNotIn('profit_hkd', result)
+            self.assertNotIn('profit_fraction', result)
+
     def test_no_automatic_execution(self):
         self.assertFalse(evaluate_loss(0)["automatic_execution"])
 
