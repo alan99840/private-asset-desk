@@ -41,6 +41,8 @@ function row(time,index){const v=2000+Math.sin(index/7)*20+index*.1;return {time
 function json(res,status,body){res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(body));}
 const fixtureTrades=[{id:'OLD-SEGMENT-CLOSE',time:base+80*300+15,price:7000,side:'SELL',action:'CLOSE',size:.5,reference:'SYNTHETIC-OLD-SEGMENT',source:'fixture'},{id:'OPEN-BUY',time:base+150*300+15,price:2020.123456789,side:'BUY',action:'OPEN',size:2,reference:'<script>synthetic-open</script>',source:'fixture'}, {id:'CLOSE-SELL-PARTIAL',time:base+150*300+15,price:2020.123456789,side:'SELL',action:'CLOSE',size:.25,reference:'SYNTHETIC-PARTIAL',source:'fixture'}, {id:'OPEN-SELL',time:base+140*300+30,price:2015.5,side:'SELL',action:'OPEN',size:1,reference:'SYNTHETIC-SHORT',source:'fixture'}, {id:'CLOSE-BUY',time:base+160*300+30,price:2021.25,side:'BUY',action:'CLOSE',size:null,reference:'SYNTHETIC-COVER',source:'fixture'}, {id:'IN-GAP',time:base+102*300,price:2000,side:'BUY',action:'OPEN',size:1,reference:'gap',source:'fixture'}, {id:'BEFORE-CACHE',time:base-200,price:2000,side:'BUY',action:'OPEN',size:1,reference:'old',source:'fixture'}, {id:'INVALID-PRICE',time:base+1000,price:NaN,side:'SELL',action:'CLOSE',size:1}];
 const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://fixture');
+  if(url.pathname==='/api/accounts'){json(res,200,{profiles:[],totals:[]});return;}
+  if(url.pathname.startsWith('/api/'))assert.equal(url.searchParams.get('profile'),'p_0123456789abcdef','every chart request must retain the selected account');
   if(url.pathname==='/api/state'){json(res,200,state);return;}
   if(url.pathname==='/api/events'){res.writeHead(200,{'Content-Type':'text/event-stream'});streams.add(res);res.write('data: '+JSON.stringify(state)+'\n\n');req.on('close',()=>streams.delete(res));return;}
   if(url.pathname==='/api/chart'){
@@ -71,7 +73,7 @@ try{
     CanvasRenderingContext2D.prototype.lineTo=function(x,y){this.__fixturePath?.push({x,y});return lineTo.call(this,x,y);};
     CanvasRenderingContext2D.prototype.stroke=function(...a){if(this.canvas.id==='drawing-overlay'&&this.getLineDash().join(',')==='3,4')(window.__fixtureTradePriceLines||=[]).push({points:this.__fixturePath?.slice(),lineWidth:this.lineWidth});return stroke.apply(this,a);};
   });
-  await page.goto(`http://127.0.0.1:${server.address().port}/#charts`);await page.locator('#chart-history-range').filter({hasText:'200 根'}).waitFor();
+  await page.goto(`http://127.0.0.1:${server.address().port}/?account=p_0123456789abcdef#charts`);await page.locator('#chart-history-range').filter({hasText:'200 根'}).waitFor();
   assert(!(await page.locator('#chart-ask').textContent()).includes('—'));assert((await page.locator('#chart-ask').textContent()).includes(new Date(1792168808870).toLocaleTimeString('zh-HK',{timeZone:'Asia/Hong_Kong',hour12:false,hour:'2-digit',minute:'2-digit'})));
   assert.equal(await page.locator('#tv-reference-frame iframe').count(),0);assert.equal(externalRequests,0,'collapsed reference must not request external resources');
   await page.waitForFunction(()=>document.querySelector('#drawing-overlay').dataset.tradeVisibleCount==='4');await page.locator('#trade-marker-status').filter({hasText:'时间区间尚未核对'}).waitFor();assert((await page.locator('#trade-marker-status').textContent()).includes('成交字段无效'));assert.equal(await page.locator('#drawing-save').isEnabled(),false,'trade dots must not dirty shared drawings');let tradeCallsBeforePeriods=tradeCalls;
