@@ -1,1 +1,19 @@
-<!doctype html><html lang="zh-Hans"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="csrf-token" content="__CSRF__"><title>Harbour · 本机 IG 连接配置</title><link rel="stylesheet" href="/setup.css"><script defer src="/setup.js"></script></head><body><main><div class="eyebrow">HARBOUR / LOCAL SETUP</div><h1>连接你的 IG 账户</h1><p>这个页面只在当前 Mac 使用，不随公开看板发布。凭据保存在本机权限受限的配置文件中，不会回显或上传 GitHub。</p><form id="setup-form"><label>环境<select name="environment"><option value="live">Live · 真实账户</option><option value="demo">Demo · IG 模拟账户</option></select></label><label>IG API Key<input name="api_key" type="password" autocomplete="off" required maxlength="500"><small>My IG → Settings → API keys。填写与你选择的环境对应的密钥。</small></label><label>IG 用户名 / Identifier<input name="identifier" autocomplete="username" required maxlength="500"><small>用于 IG API 登录的用户名，可能与邮箱不同。</small></label><label>IG 登录密码<input name="password" type="password" autocomplete="current-password" required maxlength="500"><small>密码直接提交给本机服务，再通过 HTTPS 验证 IG 登录。</small></label><label>IG Account ID（可先留空）<input name="account_id" autocomplete="off" maxlength="30"><small>是账户编号，不是用户名。仅一个 HKD CFD 账户时自动选择；有多个时会提示选择。</small></label><label>历史记录起始日<input name="history_since" type="date" value="2026-01-01" required><small>建议不晚于开户日。按月份与分页回补；接口无法提供的历史会标记缺口。</small></label><div class="note">风险基准：初始净投入 HKD 30,000，累计亏损提醒线 60%。保存配置后的额外入金、出金单独调整。不会下单或修改你的交易。</div><button type="submit">保存配置并连接</button><p id="save-result" role="status"></p></form><section><h2>连接状态</h2><div id="connection-status" role="status">正在读取…</div><div id="account-choices"></div></section><p class="footer">公开看板使用 8786；本机配置仅使用 8787。请勿将 8787 设置为 Funnel 目标。</p></main></body></html>
+<!doctype html><html lang="zh-Hans"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="csrf-token" content="__CSRF__"><title>Harbour · 本机多账户配置</title><link rel="stylesheet" href="/setup.css"><script defer src="/setup.js"></script></head><body><main>
+<div class="eyebrow">HARBOUR / LOCAL SETUP</div><h1>连接多个 IG 账户</h1>
+<p>每个不同的 IG 登录名使用自己的 API Key。连接、资金、流水和图表标注独立保存；当前支持 HKD 本位的 CFD 账户。</p>
+<div class="profile-picker"><label for="profile-select">编辑账户</label><select id="profile-select"><option value="default">主账户</option><option value="new">＋ 新增 IG 登录账户</option></select><button type="button" id="add-profile">新增账户</button></div>
+<form id="setup-form">
+<label>账户显示名称<input name="name" maxlength="40" required placeholder="例如：主账户、家庭账户"></label>
+<label>环境<select name="environment"><option value="live">Live · 真实账户</option><option value="demo">Demo · IG 模拟账户</option></select><small>Live 与 Demo 分别汇总；更换登录名或环境请新增账户。</small></label>
+<label>IG API Key<input name="api_key" type="password" autocomplete="off" maxlength="500"><small>My IG → Settings → API keys。编辑已有账户时留空保留原值。</small></label>
+<label>IG 用户名 / Identifier<input name="identifier" autocomplete="off" maxlength="500"><small>用于 API 登录的用户名，可能与邮箱不同；已有账户留空保留。</small></label>
+<label>IG 登录密码<input name="password" type="password" autocomplete="off" maxlength="500"><small>编辑已有账户时留空保留原密码。凭据不会回显或上传 GitHub。</small></label>
+<label>IG Account ID（可先留空）<input name="account_id" autocomplete="off" maxlength="30"><small>仅一个启用的 HKD CFD 账户时自动选择；有多个时下方提示候选账户编号。</small></label>
+<label>历史记录起始日<input name="history_since" type="date" required><small>请设为不晚于首次入金的日期，用于核验累计入金。无法取得的历史会标记缺口。</small></label>
+<label class="check-label"><input name="enabled" type="checkbox" checked>启用此账户的后台监控</label>
+<div class="note">每个账户独立计算：亏损比例＝1 − 权益 ÷ 累计入金总额，达到 60% 提醒。不会自动下单或平仓。新增账户会显示在现有分享看板，使用现有访问密码查看。</div>
+<button type="submit">保存此账户并应用</button><p id="save-result" role="status"></p>
+</form>
+<section><h2>全部账户连接状态</h2><div id="connection-status" role="status">正在读取…</div><div id="account-choices"></div></section>
+<p class="footer">此配置页仅限当前 Mac：127.0.0.1:8787。请勿将 8787 设置为 Funnel 目标。<a href="http://127.0.0.1:8786/#accounts" target="_blank" rel="noopener">打开多账户总览 ↗</a></p>
+</main></body></html>
