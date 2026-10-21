@@ -81,6 +81,18 @@ cd "$HOME/Library/Application Support/HarbourCFD"
 
 图表库为本机提供的 Lightweight Charts，保留 TradingView 署名和许可证；打开图表无需从公共 CDN 加载图表代码。图表缓存与标注属于私有运行状态，不随源码上传 GitHub。
 
+### 图表下方的趋势解读与风险提示
+
+每个持仓或关注产品的图表下，按当前八选一周期显示规则化趋势：已确认收盘价 > EMA20 > EMA50 且 RSI > 50 为偏多；收盘价 < EMA20 < EMA50 且 RSI < 50 为偏空；其余按震荡 / 分歧观察。分歧不代表已确认存在稳定区间。这是本平台透明观察规则，没有回测胜率或概率预测；仓位风险页的 EMA 结构标签与此处加入 RSI 确认的综合状态可能不同。
+
+RSI14 按四档高亮：`>70`、`50–70`（含两端）、`30–50`（含 30、不含 50）、`<30`。50 显示在上档但动量中性，不满足偏多确认；70 尚未进入超买，30 尚未进入超卖。超买不等于见顶，超卖不等于见底。
+
+关键价位列出 EMA20/50、前 20/60 根高低点（不含最新已收盘 K 线）和已收盘价 ±1 ATR。显示价位相对已收盘价的位置，不把已突破高点机械标为上方阻力。ATR 用作历史波动尺与均线偏离量度，不决定方向；距 EMA20 达到 2 ATR 提醒价格延伸，该阈值未作胜率回测，±1 ATR 不是预测区间或建议止损。
+
+依据同一账户、当前产品的持仓，提示逆势仓位、双向持仓、未返回止损、止损参考价被触及和不足 1 ATR 的距离。持仓超过 90 秒、独立同步失败、报价超过 30 秒、延迟或交叉报价时停止相应测算；多仓用 Bid、空仓用 Ask，仅作观察，不发送订单。没有持仓的关注产品仅显示行情观察。API 复用已加载 K 线及原有账户数据，不因解释面板额外读取 IG 行情。
+
+API 受限、历史缺口/时段冲突、无效行情或样本不足时，不发布有效趋势与关键价位；后台断流或快照超过 15 秒、图表核验超过 90 秒时前端同样清空当前解读。历史曲线仍可查看。切换品种、账户与周期会清理上一张图的解读；隐藏指标曲线不改变计算。RSI 与 ATR 基础参考：[IG RSI](https://www.ig.com/sg/trading-strategies/relative-strength-index--rsi---the-complete-guide-for-traders-250717)、[IG ATR](https://www.ig.com/en/trading-opportunities/how-to-trade-average-true-range-41931-180201)。
+
 ### TradingView 分析图表
 
 图表页另提供按需展开的 TradingView 参考图，使用 [react-ts-tradingview-widgets](https://github.com/JorrinKievit/react-ts-tradingview-widgets) 1.2.8 的 `AdvancedRealTimeChart`，以 React 18.3.1 + TypeScript 构建本地入口。产品、八个周期及 K 线/趋势线选择随 IG 图表联动；没有明确映射的产品显示待配置，不猜测代码。当前原油参考 `OANDA:WTICOUSD`，日本 225 参考 `OANDA:JP225USD`。

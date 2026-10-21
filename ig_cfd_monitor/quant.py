@@ -93,6 +93,70 @@ def indicators(candles, resolution, epoch=None, epic=None):
     return out
 
 
+def rsi_band(value):
+    """Disjoint user-selected ranges; 50 is assigned to upper, but is neutral."""
+    value=num(value)
+    if value is None or not 0<=value<=100:return None
+    return 'overbought' if value>70 else 'strong' if value>=50 else 'weak' if value>=30 else 'oversold'
+
+
+def chart_reading(quality, response):
+    """Explain this chart's completed bars, not a probability or dealing signal.
+
+    EMA supplies structure, RSI confirms direction, ATR only describes movement.
+    Keep blocked outputs empty so stale levels cannot look like current guidance.
+    """
+    reasons=[r['message'] for r in quality.get('reasons',[]) if r.get('message')]
+    if response.get('status')!='ready':
+        reasons.insert(0,response.get('message') or {
+            'loading':'历史行情正在更新，等待本次读取完成。',
+            'limited':'IG 历史行情额度受限，等待重新核验。',
+            'error':'历史行情读取失败，等待连接恢复。'
+        }.get(response.get('status'),'历史行情状态尚未核验。'))
+    if response.get('skipped_rows'):reasons.append('本次历史包含无效 K 线，等待行情完整性核验。')
+    keys=('close','ema20','ema50','atr14','rsi14','high20','low20','high60','low60')
+    values={k:num(quality.get(k)) for k in keys}
+    out={'status':'WAIT','regime':'WAIT','resolution':quality.get('resolution'),
+         'as_of':quality.get('as_of'),'observations':quality.get('observations',0),
+         'reasons':list(dict.fromkeys(reasons)), 'values':{},'levels':[],
+         'rsi_band':None,'summary':'暂停趋势判断','watch':[],'risks':[]}
+    if quality.get('status')!='READY' or reasons:return out
+    if any(v is None for v in values.values()) or rsi_band(values['rsi14']) is None or values['atr14']<0:
+        out['reasons']=['指标数值不完整或无效，等待重新核验。'];return out
+    c,f,s,a,r=(values[k] for k in ('close','ema20','ema50','atr14','rsi14'))
+    structure='UP' if c>f>s else 'DOWN' if c<f<s else 'RANGE'
+    regime='UP' if structure=='UP' and r>50 else 'DOWN' if structure=='DOWN' and r<50 else 'RANGE'
+    summary={
+        'UP':'收盘价高于 EMA20，EMA20 高于 EMA50，RSI 高于 50；价格结构与动量同向，当前偏多。',
+        'DOWN':'收盘价低于 EMA20，EMA20 低于 EMA50，RSI 低于 50；价格结构与动量同向，当前偏空。',
+        'RANGE':'价格、EMA20/50 与 RSI 未形成同向确认，暂按震荡 / 分歧观察；不代表已确认存在稳定区间。'
+    }[regime]
+    levels=[{'key':k,'label':label,'price':values[k]} for k,label in (
+        ('ema20','EMA20 · 短期分界'),('ema50','EMA50 · 趋势分界'),
+        ('low20','前 20 根低点'),('high20','前 20 根高点'),
+        ('low60','前 60 根低点'),('high60','前 60 根高点'))]
+    if a>0:levels.extend([{'key':'atr_lower','label':'收盘价 − 1 ATR','price':c-a},
+                          {'key':'atr_upper','label':'收盘价 + 1 ATR','price':c+a}])
+    watch=[
+        '若后续收盘价突破当时的前 20 根高点，且 EMA20 > EMA50、RSI > 50，可继续观察上行延续。',
+        '若后续收盘价跌破当时的前 20 根低点，且 EMA20 < EMA50、RSI < 50，可继续观察下行延续。',
+        '偏多时收盘价回落至 EMA20 下方，或偏空时回升至 EMA20 上方，原有结构开始减弱；RSI 回到 50 附近需重新确认。'
+    ]
+    risks=[]
+    if r>70:risks.append('RSI > 70：动量偏强且进入超买区，关注回撤；强趋势可持续超买，不能单凭此项判断见顶。')
+    elif r<30:risks.append('RSI < 30：动量偏弱且进入超卖区，关注反弹；弱趋势可持续超卖，不能单凭此项判断见底。')
+    elif r==50:risks.append('RSI = 50：多空动量中性；四档展示归入 50–70，但不作为偏多确认。')
+    if a==0:risks.append('ATR 为 0：样本没有有效波动，不能计算 ATR 距离或波动区间。')
+    extension=abs(c-f)/a if a>0 else None
+    if extension is not None and extension>=2:
+        risks.append('收盘价偏离 EMA20 已达到 2 ATR，注意延伸后的回摆风险；2 ATR 是本平台观察阈值，未作胜率回测。')
+    risks.append('±1 ATR 仅是以收盘价为中心的历史波动尺，不是未来价格预测区间，也不是建议止损价。')
+    out.update(status='READY',regime=regime,ema_structure=structure,values=values,
+               levels=levels,rsi_band=rsi_band(r),summary=summary,watch=watch,risks=risks,
+               extension_atr=extension,atr_percent=a/abs(c)*100 if c else None)
+    return out
+
+
 def point_spec(position, details, epoch=None):
     epoch=time.time() if epoch is None else epoch
     instrument=details.get('instrument',{});snap=details.get('snapshot',{})

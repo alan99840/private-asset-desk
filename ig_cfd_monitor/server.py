@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlsplit
 from runtime import Monitor
 from chart_history import ChartHistory, ChartError, MAX_DRAWING_BYTES
 from trade_markers import TradeMarkers
-from quant import Analytics, num, indicators
+from quant import Analytics, num, indicators, chart_reading
 
 ROOT=Path(__file__).resolve().parent
 ASSETS={'/':('index.html','text/html; charset=utf-8'),'/index.html':('index.html','text/html; charset=utf-8'),
@@ -177,6 +177,7 @@ class Handler(BaseHTTPRequestHandler):
                 epoch=time.time();quality=indicators(result.get('candles',[]),resolution,epoch,epic)
                 result={**result,'indicator_quality':{k:quality[k] for k in ('status','reasons','session','observations','as_of')}}
                 result['indicator_quality']['calculated_at']=epoch
+                result['interpretation']=chart_reading(quality,result)
                 self.reply(result)
             elif uri.path=='/api/chart/drawings':
                 query=parse_qs(uri.query,max_num_fields=2)
