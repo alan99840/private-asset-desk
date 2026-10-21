@@ -2,7 +2,7 @@ import math
 import unittest
 from copy import deepcopy
 from datetime import datetime,timezone
-from quant import indicators,point_spec,portfolio,stress,correlation,ema
+from quant import indicators,point_spec,portfolio,stress,correlation,ema,rsi_band,chart_reading
 
 NOW=1800000000
 
@@ -15,6 +15,40 @@ def fixture():
  return state
 
 class QuantTests(unittest.TestCase):
+ def test_rsi_four_disjoint_bands(self):
+  for value,expected in [(0,'oversold'),(29.999,'oversold'),(30,'weak'),(49.999,'weak'),(50,'strong'),(70,'strong'),(70.001,'overbought'),(100,'overbought')]:
+   self.assertEqual(rsi_band(value),expected)
+  for value in [None,True,'invalid',float('nan'),float('inf'),-1,101]:self.assertIsNone(rsi_band(value))
+ def chart_quality(self):
+  return dict(status='READY',resolution='HOUR',observations=99,as_of=NOW-7200,reasons=[],close=110,ema20=105,ema50=100,atr14=2,rsi14=60,low20=95,high20=109,low60=90,high60=115)
+ def test_chart_trend_requires_ema_and_rsi_confirmation(self):
+  q=self.chart_quality();a=chart_reading(q,{'status':'ready'})
+  self.assertEqual(a['regime'],'UP');self.assertEqual(a['extension_atr'],2.5)
+  self.assertEqual(a['levels'][-2]['price'],108);self.assertEqual(a['levels'][-1]['price'],112)
+  self.assertTrue(any('2 ATR' in r for r in a['risks']))
+  for rsi in [50,49,20]:
+   q['rsi14']=rsi;self.assertEqual(chart_reading(q,{'status':'ready'})['regime'],'RANGE')
+  q.update(close=90,ema20=95,ema50=100,rsi14=40)
+  self.assertEqual(chart_reading(q,{'status':'ready'})['regime'],'DOWN')
+  q.update(rsi14=55);self.assertEqual(chart_reading(q,{'status':'ready'})['regime'],'RANGE')
+  q.update(close=100,ema20=100,rsi14=60);self.assertEqual(chart_reading(q,{'status':'ready'})['regime'],'RANGE')
+ def test_chart_quality_blocks_current_levels_and_regime(self):
+  for status in ['LIMITED','INSUFFICIENT']:
+   q=self.chart_quality();q.update(status=status,reasons=[{'message':'合成数据缺口'}]);out=chart_reading(q,{'status':'ready'})
+   self.assertEqual(out['regime'],'WAIT');self.assertEqual(out['levels'],[]);self.assertEqual(out['values'],{});self.assertIsNone(out['rsi_band'])
+  for response in [{'status':'error'},{'status':'loading'},{'status':'limited'},{'status':'ready','skipped_rows':1}]:
+   self.assertEqual(chart_reading(self.chart_quality(),response)['status'],'WAIT')
+  for field,value in [('rsi14',101),('atr14',-1),('ema20',None),('low20',float('inf'))]:
+   q=self.chart_quality();q[field]=value;self.assertEqual(chart_reading(q,{'status':'ready'})['status'],'WAIT')
+ def test_chart_zero_atr_and_neutral_boundary(self):
+  q=self.chart_quality();q.update(atr14=0,rsi14=50,close=0)
+  out=chart_reading(q,{'status':'ready'});self.assertEqual(out['regime'],'RANGE');self.assertIsNone(out['extension_atr']);self.assertIsNone(out['atr_percent']);self.assertEqual(len(out['levels']),6)
+  self.assertTrue(any('RSI = 50' in r for r in out['risks']))
+ def test_chart_ranges_and_tail_remain_no_lookahead(self):
+  bars=candles();q=indicators(bars,'HOUR',NOW);a=chart_reading(q,{'status':'ready'})
+  self.assertEqual(a['values']['high20'],199)
+  bars[-1].update(close=1e9,high=1e9)
+  self.assertEqual(chart_reading(indicators(bars,'HOUR',NOW),{'status':'ready'}),a)
  def test_completed_tail_and_prior_ranges(self):
   bars=candles();a=indicators(bars,'HOUR',NOW);bars[-1]['close']=1e9;bars[-1]['high']=1e9
   self.assertEqual(a,indicators(bars,'HOUR',NOW));self.assertEqual(a['observations'],99)

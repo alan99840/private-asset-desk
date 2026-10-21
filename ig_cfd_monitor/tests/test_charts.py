@@ -493,6 +493,9 @@ class ChartHTTPTests(unittest.TestCase):
         self.assertEqual(response['indicator_quality']['observations'], 0)
         self.assertEqual(response['indicator_quality']['status'], 'INSUFFICIENT')
         self.assertGreater(response['indicator_quality']['calculated_at'], 0)
+        self.assertEqual(response['interpretation']['status'], 'WAIT')
+        self.assertEqual(response['interpretation']['levels'], [])
+        self.assertIsNone(response['interpretation']['rsi_band'])
         for query in ['epic=x&resolution=DAY', 'epic='+EPIC+'&resolution=SECOND',
                       'epic='+EPIC+'&resolution=DAY&before=nan', 'epic='+EPIC+'&resolution=DAY&resolution=DAY']:
             self.assertIn(self.request('/api/chart?'+query)[0], (400, 403))
