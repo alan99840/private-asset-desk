@@ -176,3 +176,11 @@ python3 export_source.py
 IG 官方说明：[REST 认证与账户 token](https://labs.ig.com/rest-trading-api-guide.html)、[订阅连接与限制](https://labs.ig.com/streaming-api-guide.html)、[API 默认配额](https://labs.ig.com/faq.html)。多个独立客户连接分别受自己的权限和配额约束；不通过重复连接同一 API Key 提高配额。
 
 新增验证：`python -m unittest discover -s tests -p "test_*.py"`；`node tests/test-profit-ui.mjs`。日间暂停、真正缺 K 线、美国/英国不同换钟周、周末跨夏令时、未知 EPIC、参考时段冲突、开市后陈旧数据及 Profit 正负/失效显示均有回归覆盖。
+
+### K 线量化指标
+
+IG 主图默认叠加 EMA20（金色）与 EMA50（蓝色），下方 ATR14（波动点数）和 RSI14（0–100，含 30/50/70 参考线）使用独立纵轴、共用时间轴。四项可独立开关，随产品与全部八种周期切换，十字光标读取对应历史值，PNG 包含当前显示的指标。画图和真实成交标记仍限定在价格主图。
+
+指标只使用当前已加载的已确认收盘 IG Bid K 线，始终排除末根及未来时间数据。EMA 以最初 N 根简单平均初始化；ATR / RSI 使用前 14 个真实波幅 / 涨跌变动初始化后按 Wilder 平滑，横盘 RSI=50。样本不足显示预热要求，不填 0。加载更早历史会重新计算初值；不同历史覆盖长度可能与量化状态页的数值略有差异。缺口不补造价格，曲线在未填补区间断开；数据受限时显示原因，指标仅作历史观察，不代表交易信号。
+
+验证：`node tests/test-chart-indicators.mjs`（数值与 Python 后端口径交叉核对，预热 / 末根 / 缺口 / 开关与分区生命周期测试）。

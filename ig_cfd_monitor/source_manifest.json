@@ -68,5 +68,7 @@
   "market_sessions.py",
   "tests/test_market_sessions.py",
   "tests/test-profit-ui.mjs",
-  "TRADING_SESSIONS.md"
+  "TRADING_SESSIONS.md",
+  "web/chart-indicators.js",
+  "tests/test-chart-indicators.mjs"
 ]

@@ -19,12 +19,13 @@ from urllib.parse import parse_qs, urlsplit
 from runtime import Monitor
 from chart_history import ChartHistory, ChartError, MAX_DRAWING_BYTES
 from trade_markers import TradeMarkers
-from quant import Analytics, num
+from quant import Analytics, num, indicators
 
 ROOT=Path(__file__).resolve().parent
 ASSETS={'/':('index.html','text/html; charset=utf-8'),'/index.html':('index.html','text/html; charset=utf-8'),
  '/style.css':('style.css','text/css; charset=utf-8'),'/live.js':('live.js','text/javascript; charset=utf-8'),
  '/favicon.svg':('favicon.svg','image/svg+xml'),'/charts.js':('charts.js','text/javascript; charset=utf-8'),
+ '/chart-indicators.js':('chart-indicators.js','text/javascript; charset=utf-8'),
  '/account-ui.js':('account-ui.js','text/javascript; charset=utf-8'),
  '/risk-ui.js':('risk-ui.js','text/javascript; charset=utf-8'),
  '/risk-ui.css':('risk-ui.css','text/css; charset=utf-8'),
@@ -171,7 +172,12 @@ class Handler(BaseHTTPRequestHandler):
                 if any(len(values)!=1 for values in query.values()) or set(query)-{'epic','resolution','before','cursor'}:
                     raise ChartError('invalid_query')
                 before=int(query['before'][0]) if 'before' in query else None
-                self.reply(charts.get(query.get('epic',[''])[0],query.get('resolution',[''])[0],before,query.get('cursor',[None])[0]))
+                epic=query.get('epic',[''])[0];resolution=query.get('resolution',[''])[0]
+                result=charts.get(epic,resolution,before,query.get('cursor',[None])[0])
+                epoch=time.time();quality=indicators(result.get('candles',[]),resolution,epoch,epic)
+                result={**result,'indicator_quality':{k:quality[k] for k in ('status','reasons','session','observations','as_of')}}
+                result['indicator_quality']['calculated_at']=epoch
+                self.reply(result)
             elif uri.path=='/api/chart/drawings':
                 query=parse_qs(uri.query,max_num_fields=2)
                 if set(query)!={'epic'} or len(query['epic'])!=1:raise ChartError('invalid_query')
