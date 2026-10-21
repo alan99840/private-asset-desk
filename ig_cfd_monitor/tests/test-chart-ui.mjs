@@ -8,7 +8,8 @@ import {createRequire} from 'node:module';
 const here=path.dirname(fileURLToPath(import.meta.url)),root=path.dirname(here);
 const require=createRequire(import.meta.url);
 let chromium;try{({chromium}=require('playwright'));}catch{({chromium}=require('/Users/zexiayang/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'));}
-const moduleText=await fs.readFile(path.join(root,'web/charts.js'),'utf8');
+const indicatorModule='data:text/javascript;base64,'+Buffer.from(await fs.readFile(path.join(root,'web/chart-indicators.js'),'utf8')).toString('base64');
+const moduleText=(await fs.readFile(path.join(root,'web/charts.js'),'utf8')).replace('./chart-indicators.js',indicatorModule);
 const {timeToLogical,logicalToTime,normalizeCandles,distanceToSegment,lineDataWithGaps,lineSegments,timestampSeconds,nextHistoryQuery,validateTradingViewUrl,normalizeTradeMarkers,tradeMarkerPlacement,logicalCoordinate,TRADE_DOT_RADIUS}=await import('data:text/javascript;base64,'+Buffer.from(moduleText).toString('base64'));
 assert.equal(TRADE_DOT_RADIUS,2.75);assert.equal(timestampSeconds(1792168808870.0),1792168808.87);assert.equal(timestampSeconds('1792168808870.0'),1792168808.87);assert.equal(timestampSeconds('2026-10-16T20:40:08.870Z'),1792183208.87);assert.equal(timestampSeconds(null),null);assert.equal(timestampSeconds('invalid'),null);assert.deepEqual(nextHistoryQuery({has_more:true,next_before:123,next_cursor:'opaque:+p2'},[]),{before:123,cursor:'opaque:+p2'});
 const referenceExpected={symbol:'OANDA:WTICOUSD',interval:'M',style:'1'},safeHash=encodeURIComponent(JSON.stringify({...referenceExpected,'page-uri':'http://private.test/?nonce=private',utm_source:'private.test'})),safeReference='https://s.tradingview.com/widgetembed/?locale=zh_CN#'+safeHash;

@@ -488,7 +488,11 @@ class ChartHTTPTests(unittest.TestCase):
         self.assertEqual(self.request('/api/chart/drawings?epic='+EPIC, 'PUT', {}, auth=False)[0], 401)
 
     def test_chart_validation_and_cached_no_connection_response(self):
-        self.assertEqual(self.request('/api/chart?epic='+EPIC+'&resolution=DAY')[1]['status'], 'error')
+        response=self.request('/api/chart?epic='+EPIC+'&resolution=DAY')[1]
+        self.assertEqual(response['status'], 'error')
+        self.assertEqual(response['indicator_quality']['observations'], 0)
+        self.assertEqual(response['indicator_quality']['status'], 'INSUFFICIENT')
+        self.assertGreater(response['indicator_quality']['calculated_at'], 0)
         for query in ['epic=x&resolution=DAY', 'epic='+EPIC+'&resolution=SECOND',
                       'epic='+EPIC+'&resolution=DAY&before=nan', 'epic='+EPIC+'&resolution=DAY&resolution=DAY']:
             self.assertIn(self.request('/api/chart?'+query)[0], (400, 403))
