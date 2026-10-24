@@ -1,0 +1,21 @@
+/* Latest quotes retain their own visual identity, separate from direction colours. */
+.product-chart-heading{align-items:center;flex-wrap:wrap}
+.product-chart-picker{flex:1;max-width:none;min-width:220px}
+.chart-quote.spot-quote{display:grid;gap:9px;min-width:300px;max-width:100%;padding:14px 17px;border:1px solid #d1dfeb;border-left:4px solid #195f9a;border-radius:9px;background:#f1f7fc;text-align:left;flex-shrink:1;color:#123d5e}
+.spot-quote .spot-quote-title{display:flex;justify-content:space-between;align-items:center;gap:14px;font-size:11px;font-weight:600;line-height:1.5}
+.spot-quote .spot-quote-status{border-radius:4px;background:#dbeaf7;color:#164b77;padding:3px 6px;font-size:10px;white-space:nowrap;font-weight:600}
+.spot-quote .spot-quote-values{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.spot-quote .spot-quote-values>div{min-width:0}
+.spot-quote .spot-quote-values>div+div{padding-left:14px;border-left:1px solid #cfdeeb}
+.spot-quote .spot-quote-values span{display:block;font-size:10px;color:#4e687c}
+.spot-quote .spot-quote-values strong{display:block;font-size:30px;font-weight:650;line-height:1.4;letter-spacing:-.5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.spot-quote .spot-quote-values #chart-ask{font-size:25px;color:#35546d}
+.spot-quote small{font-size:10px;color:#526d81;line-height:1.6;overflow-wrap:anywhere}
+.spot-quote .spot-quote-time{border-top:1px solid #d7e3ed;padding-top:6px}
+.spot-quote[data-quote-kind="stale"],.spot-quote[data-quote-kind="delayed"],.spot-quote[data-quote-kind="restricted"],.spot-quote[data-quote-kind="closed"],.spot-quote[data-quote-kind="waiting"]{background:#faf6ee;border-color:#e5d9c5;border-left-color:#8a622b;color:#674b27}
+.spot-quote:not([data-quote-kind="live"]) .spot-quote-status{background:#efe3ce;color:#705022}
+.spot-quote:not([data-quote-kind="live"]) .spot-quote-values>div+div{border-color:#e5d9c5}
+.spot-quote:not([data-quote-kind="live"]) .spot-quote-time{border-color:#e5d9c5}
+.spot-quote:not([data-quote-kind="live"]) .spot-quote-values #chart-ask,.spot-quote:not([data-quote-kind="live"]) small{color:#786247}
+@media(max-width:980px){.chart-quote.spot-quote{min-width:270px}.spot-quote .spot-quote-values strong{font-size:28px}.spot-quote .spot-quote-values #chart-ask{font-size:24px}}
+@media(max-width:700px){.product-chart-picker{width:100%;min-width:0;max-width:100%;flex-basis:100%}.chart-quote.spot-quote{width:100%;min-width:0;max-width:100%;padding:12px 13px;gap:7px}.spot-quote .spot-quote-values strong{font-size:30px}.spot-quote .spot-quote-values #chart-ask{font-size:26px}.spot-quote .spot-quote-title{font-size:11px}.spot-quote small{font-size:10px}.spot-quote .spot-quote-values span{font-size:10px}}
