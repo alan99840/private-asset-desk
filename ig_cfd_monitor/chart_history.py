@@ -201,6 +201,7 @@ class ChartHistory:
         self.monitor = monitor
         self.lock = threading.RLock()
         self.pending = set()
+        self.research_pending = set()
         self.jobs = queue.Queue(maxsize=32)
         if path is None:
             prepare_state()
@@ -349,6 +350,52 @@ class ChartHistory:
             return requested
         reserve = min(500, max(20, int(allowance.get('totalAllowance', 10000) * .05))) if automatic else 0
         return min(requested, max(0, int(remaining) - reserve))
+
+    def refresh_research(self, epic, resolution):
+        """Explicit, quota-bounded refresh to repair old Bid-only cache rows."""
+        scope, client = self._context(epic)
+        if resolution not in RESOLUTIONS:
+            raise ChartError('invalid_resolution')
+        if not client:
+            raise ChartError('account_not_connected', 503)
+        key = (scope, epic, resolution)
+        with self.lock, self.db:
+            meta = self._meta(key)
+            if key in self.pending:
+                return {'status': 'loading', 'message': '此产品与周期已有历史请求正在处理。'}
+            if meta.get('retry_at', 0) > time.time():
+                return {'status': 'limited', 'message': meta.get('message') or 'IG 历史请求正在等待重试。'}
+            if time.time()-meta.get('research_refresh_at', 0) < 120:
+                return {'status': 'recent', 'message': '最近两分钟已请求刷新；复用缓存，保护历史额度。'}
+            # Preserve the normal collector reserve even for manual research.
+            if self._budget(scope, BATCH, True) < BATCH:
+                return {'status': 'limited', 'message': '历史额度不足以刷新 200 根并保留监控额度，暂不发送请求。'}
+            try:
+                self.jobs.put_nowait((key, client, None, BATCH, None))
+            except queue.Full:
+                return {'status': 'limited', 'message': '历史加载队列繁忙，请稍后重试。'}
+            self.pending.add(key)
+            self.research_pending.add(key)
+            meta['research_refresh_at'] = time.time()
+            self._put_meta(key, meta)
+            return {'status': 'loading', 'message': '正在刷新最近 200 根 Bid / Ask K 线；不会批量下载其他周期。'}
+
+    def snapshot(self, epic, resolution):
+        """Read account-scoped research data without queuing any IG request."""
+        scope, _ = self._context(epic)
+        if resolution not in RESOLUTIONS:
+            raise ChartError('invalid_resolution')
+        key = (scope, epic, resolution)
+        with self.lock:
+            rows = self.db.execute('SELECT payload FROM chart_candles WHERE scope=? AND epic=? AND resolution=? ORDER BY time DESC LIMIT ?', (*key, MAX_CANDLES)).fetchall()
+            candles = [json.loads(row[0]) for row in reversed(rows)]
+            meta = self._meta(key)
+            return {'status': 'cached', 'epic': epic, 'resolution': resolution,
+                    'candles': candles, 'price_basis': 'bid', 'source': 'IG REST /prices v3 · 本机历史缓存',
+                    'updated_at': meta.get('updated_at'), 'skipped_rows': meta.get('skipped_rows', 0),
+                    'has_more': bool(meta.get('has_more', True)) and len(candles) < MAX_CANDLES,
+                    'allowance': self._public_allowance(scope),
+                    'last_fetch_status': meta.get('status'), 'last_fetch_error': meta.get('error')}
 
     def get(self, epic, resolution, before=None, cursor=None):
         scope, client = self._context(epic)
@@ -547,7 +594,7 @@ class ChartHistory:
                 raise IGError('local.chart.connection.changed')
             with self.lock:
                 meta = self._meta(key)
-                count = self._budget(scope, requested, before is None and bool(meta.get('last_success')))
+                count = self._budget(scope, requested, before is None and (bool(meta.get('last_success')) or key in self.research_pending))
             if not count:
                 raise IGError('local.chart.allowance.reserved')
             older = None
@@ -608,6 +655,7 @@ class ChartHistory:
         finally:
             with self.lock:
                 self.pending.discard(key)
+                self.research_pending.discard(key)
             self.jobs.task_done()
         return True
 

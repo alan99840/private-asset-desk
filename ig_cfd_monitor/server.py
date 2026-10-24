@@ -20,12 +20,17 @@ from runtime import Monitor
 from chart_history import ChartHistory, ChartError, MAX_DRAWING_BYTES
 from trade_markers import TradeMarkers
 from quant import Analytics, num, indicators, chart_reading
+from strategy_lab import run_study
 
 ROOT=Path(__file__).resolve().parent
 ASSETS={'/':('index.html','text/html; charset=utf-8'),'/index.html':('index.html','text/html; charset=utf-8'),
  '/style.css':('style.css','text/css; charset=utf-8'),'/live.js':('live.js','text/javascript; charset=utf-8'),
  '/favicon.svg':('favicon.svg','image/svg+xml'),'/charts.js':('charts.js','text/javascript; charset=utf-8'),
  '/chart-indicators.js':('chart-indicators.js','text/javascript; charset=utf-8'),
+ '/spot-price.js':('spot-price.js','text/javascript; charset=utf-8'),
+ '/spot-price.css':('spot-price.css','text/css; charset=utf-8'),
+ '/strategy-ui.js':('strategy-ui.js','text/javascript; charset=utf-8'),
+ '/strategy-ui.css':('strategy-ui.css','text/css; charset=utf-8'),
  '/account-ui.js':('account-ui.js','text/javascript; charset=utf-8'),
  '/risk-ui.js':('risk-ui.js','text/javascript; charset=utf-8'),
  '/risk-ui.css':('risk-ui.css','text/css; charset=utf-8'),
@@ -36,6 +41,7 @@ ASSETS={'/':('index.html','text/html; charset=utf-8'),'/index.html':('index.html
 TV_DOCUMENT='/tv-reference.html'
 TV_PUBLIC_BUNDLE='/vendor/tv-reference.js'
 SLOTS=threading.BoundedSemaphore(32)
+STUDY_SLOTS=threading.BoundedSemaphore(2)
 MONITOR=None
 CHARTS=None
 TRADES=None
@@ -157,6 +163,22 @@ class Handler(BaseHTTPRequestHandler):
             elif uri.path=='/api/accounts':
                 self.reply(FLEET.overview() if FLEET else {'profiles':[],'totals':[]})
             elif uri.path=='/api/state':self.reply(monitor.project())
+            elif uri.path=='/api/strategy/history':
+                query=parse_qs(uri.query,keep_blank_values=True,max_num_fields=2)
+                if set(query)!={'epic','resolution'} or any(len(v)!=1 for v in query.values()):raise ChartError('invalid_query')
+                self.reply(charts.refresh_research(query['epic'][0],query['resolution'][0]))
+            elif uri.path=='/api/strategy':
+                query=parse_qs(uri.query,keep_blank_values=True,max_num_fields=9)
+                allowed={'epic','resolution','mode','risk_pct','slippage','financing_bps_daily','fee_points','max_bars'}
+                if any(len(v)!=1 for v in query.values()) or set(query)-allowed:raise ChartError('invalid_query')
+                epic=query.pop('epic',[''])[0];resolution=query.pop('resolution',['HOUR'])[0]
+                if not STUDY_SLOTS.acquire(blocking=False):raise ChartError('study_busy',429)
+                try:
+                    history=charts.snapshot(epic,resolution)
+                    result=run_study(history,epic,resolution,{k:v[0] for k,v in query.items()})
+                    result['cache']={k:history.get(k) for k in ('source','updated_at','has_more','allowance','last_fetch_status','last_fetch_error')}
+                    self.reply(result)
+                finally:STUDY_SLOTS.release()
             elif uri.path=='/api/analytics':
                 query=parse_qs(uri.query,max_num_fields=7)
                 if any(len(v)!=1 for v in query.values()) or set(query)-{'resolution','mode','shock','fx','spread','cost','epic'}:raise ChartError('invalid_query')

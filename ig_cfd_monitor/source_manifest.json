@@ -70,5 +70,15 @@
   "tests/test-profit-ui.mjs",
   "TRADING_SESSIONS.md",
   "web/chart-indicators.js",
-  "tests/test-chart-indicators.mjs"
+  "tests/test-chart-indicators.mjs",
+  "strategy_lab.py",
+  "STRATEGY_RESEARCH.md",
+  "web/strategy-ui.js",
+  "web/strategy-ui.css",
+  "web/spot-price.js",
+  "web/spot-price.css",
+  "tests/test_strategy_lab.py",
+  "tests/test_strategy_api.py",
+  "tests/test-strategy-ui.mjs",
+  "tests/test-spot-price.mjs"
 ]
