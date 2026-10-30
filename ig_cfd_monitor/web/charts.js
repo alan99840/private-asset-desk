@@ -240,9 +240,9 @@ class ProductCharts{
     if(key!==this.quoteLineKey){this.quoteLineKey=key;if(quote.bid!=null&&!this.bidLines.length)this.bidLines=[this.candleSeries.createPriceLine(options),this.lineSeries.createPriceLine(options)];else for(const line of this.bidLines)line.applyOptions(options);this.refreshTradeScale();}
   }
   references(){
-    if(!this.chart)return;const positions=(this.data.positions||[]).filter(p=>p.epic===this.epic),key=JSON.stringify([this.epic,this.type,positions.map(p=>[p.dealId,p.level,p.stopLevel,p.limitLevel])]);if(key===this.linesKey)return;this.linesKey=key;
+    if(!this.chart)return;const age=(Date.now()-Date.parse(this.data.positions_at))/1000,unverified=this.data.chart_transport_stale||this.data.positions_stale||!Number.isFinite(age)||age<0||age>90||(this.data.sync?.positions&&this.data.sync.positions.status!=='ok');const positions=(this.data.positions||[]).filter(p=>p.epic===this.epic),key=JSON.stringify([this.epic,this.type,unverified,positions.map(p=>[p.dealId,p.level,p.stopLevel,p.limitLevel])]);if(key===this.linesKey)return;this.linesKey=key;
     for(const [s,l] of this.priceLines)s.removePriceLine(l);this.priceLines=[];
-    for(const [i,p] of positions.entries())for(const [field,title,color] of [['stopLevel','止损','#b44b4c'],['limitLevel','止盈','#946526']])if(finite(p[field]))this.priceLines.push([this.series,this.series.createPriceLine({price:p[field],color,lineWidth:1,lineStyle:2,axisLabelVisible:true,title:`${title}${positions.length>1?` ${i+1}`:''}`})]);
+    for(const [i,p] of positions.entries())for(const [field,title,color] of [['stopLevel','止损','#b44b4c'],['limitLevel','止盈','#946526']])if(finite(p[field]))this.priceLines.push([this.series,this.series.createPriceLine({price:p[field],color,lineWidth:1,lineStyle:2,axisLabelVisible:true,title:`${title}${positions.length>1?` ${i+1}`:''}${unverified?' · 待核验':''}`})]);
   }
   async load({earlier=false}={}){
     if(!this.epic||this.busy||this.destroyed)return;const requested=earlier?nextHistoryQuery(this.response,this.candles):this.pendingQuery||{};if(!requested)return;clearTimeout(this.pollTimer);
