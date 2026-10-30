@@ -80,5 +80,6 @@
   "tests/test_strategy_lab.py",
   "tests/test_strategy_api.py",
   "tests/test-strategy-ui.mjs",
-  "tests/test-spot-price.mjs"
+  "tests/test-spot-price.mjs",
+  "tests/test-sync-ui.mjs"
 ]

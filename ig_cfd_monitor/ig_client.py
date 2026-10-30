@@ -7,7 +7,7 @@ import threading
 import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
-from urllib.request import Request, build_opener, HTTPSHandler, HTTPRedirectHandler
+from urllib.request import Request, build_opener, HTTPSHandler, HTTPRedirectHandler, ProxyHandler, getproxies
 
 
 class IGError(Exception):
@@ -35,12 +35,25 @@ class IGClient:
             context = ssl.create_default_context(cafile=certifi.where())
         except ImportError:
             context = ssl.create_default_context()
-        self.opener = build_opener(HTTPSHandler(context=context), NoRedirect())
+        self.tls_context = context
+        self.proxy_settings = None
+        self.opener = None
+        self.refresh_transport()
         self.tokens = {}
         self.lock = threading.RLock()
         self.last_request = 0
         self.account_id = None
         self.stream_endpoint = None
+
+    def refresh_transport(self):
+        # A long-running collector must follow changes to the Mac/system proxy.
+        # Retain session tokens and TLS verification; never fall back to direct
+        # access when the user's configured proxy is unavailable.
+        proxies = getproxies()
+        if proxies != self.proxy_settings:
+            self.opener = build_opener(ProxyHandler(proxies),
+                HTTPSHandler(context=self.tls_context), NoRedirect())
+            self.proxy_settings = dict(proxies)
 
     @classmethod
     def validate_path(cls, method, path):
@@ -74,6 +87,7 @@ class IGClient:
                 req = Request(self.root+path, data=json.dumps(payload).encode() if payload is not None else None,
                               headers=headers, method=method)
                 try:
+                    self.refresh_transport()
                     with self.opener.open(req, timeout=10) as response:
                         for header in ('CST', 'X-SECURITY-TOKEN'):
                             if response.headers.get(header):

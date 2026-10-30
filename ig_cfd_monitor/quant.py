@@ -207,6 +207,14 @@ def portfolio(state, signals, epoch=None):
     epoch=time.time() if epoch is None else epoch
     quotes={q['epic']:q for q in state.get('markets',[])};details=state.get('market_specs',{})
     account=state.get('account') or {};eq=num(account.get('equity'))
+    latest=state.get('positions_at')
+    try:position_age=epoch-datetime.fromisoformat(latest).timestamp()
+    except (ValueError,TypeError):position_age=None
+    sync=state.get('sync') or {};position_sync=sync.get('positions')
+    position_sync_ok='positions' not in sync or (isinstance(position_sync,dict) and position_sync.get('status')=='ok')
+    positions_stale=bool(state.get('positions_stale') or state.get('positions') is None or
+        position_age is None or not 0<=position_age<=90 or
+        not position_sync_ok)
     positions=[];groups={};unverified=0
     for p in state.get('positions') or []:
         epic=p['epic'];q=quotes.get(epic,{});sign=1 if p.get('direction')=='BUY' else -1
@@ -214,7 +222,7 @@ def portfolio(state, signals, epoch=None):
         close=bid if sign>0 else ask;spec=point_spec(p,details.get(epic,{}),epoch)
         per=spec.get('hkd_per_point_per_contract');atr=signals.get(epic,{}).get('atr14');stop=num(p.get('stopLevel'))
         ready=bool(p.get('direction') in ('BUY','SELL') and per is not None and size is not None and size>0 and level is not None and close is not None and bid is not None and ask is not None and ask>=bid)
-        stale=q.get('stale',True) or q.get('delayed',False) or spec.get('stale',False)
+        stale=positions_stale or q.get('stale',True) or q.get('delayed',False) or spec.get('stale',False)
         row={**p,'spec':spec,'reference_price':close,'quote_at':q.get('timestamp'),
              'status':'UNVERIFIED' if not ready else 'STALE' if stale else 'ESTIMATE',
              'hkd_per_point':sign*size*per if ready else None,
@@ -229,7 +237,7 @@ def portfolio(state, signals, epoch=None):
         if not ready:unverified+=1
         group=groups.setdefault(epic,{'epic':epic,'name':p.get('instrumentName'), 'count':0,
              'long_size':0,'short_size':0,'net_hkd_per_point':0,'gross_hkd_per_point':0,
-             'gross_notional_hkd':0,'net_notional_hkd':0,'estimated_pnl_hkd':0,'unverified':0,'stale':False})
+             'gross_notional_hkd':0,'net_notional_hkd':0,'estimated_pnl_hkd':0,'unverified':0,'stale':positions_stale})
         group['count']+=1;group['long_size' if sign>0 else 'short_size']+=size or 0
         if ready:
             group['net_hkd_per_point']+=row['hkd_per_point'];group['gross_hkd_per_point']+=size*per
@@ -240,13 +248,10 @@ def portfolio(state, signals, epoch=None):
     for g in groups.values():g['concentration']=g['gross_notional_hkd']/gross if gross and not unverified else None
     broker=num(account.get('unrealized'));difference=estimated-broker if broker is not None and not unverified else None
     tolerance=max(50,abs(broker or 0)*.05)
-    reconcile='INCOMPLETE' if unverified or broker is None else 'STALE' if state.get('stale') or any(g['stale'] for g in groups.values()) else 'WITHIN_TOLERANCE' if abs(difference)<=tolerance else 'CHECK_REQUIRED'
+    reconcile='INCOMPLETE' if state.get('positions') is None or unverified or broker is None else 'STALE' if positions_stale or state.get('stale') or any(g['stale'] for g in groups.values()) else 'WITHIN_TOLERANCE' if abs(difference)<=tolerance else 'CHECK_REQUIRED'
     missing_stop=sum(1 for p in positions if p.get('stopLevel') is None)
     known_stop=sum(p['loss_to_stop_hkd'] or 0 for p in positions)
-    latest=state.get('positions_at')
-    try:position_age=epoch-datetime.fromisoformat(latest).timestamp()
-    except (ValueError,TypeError):position_age=None
-    complete=state.get('positions') is not None and not unverified and position_age is not None and 0<=position_age<=90 and not state.get('stale') and not any(g['stale'] for g in groups.values())
+    complete=not positions_stale and not unverified and not state.get('stale') and not any(g['stale'] for g in groups.values())
     return {'positions':positions,'groups':list(groups.values()),'unverified_positions':unverified,
         'status':'READY' if complete else 'DATA_LIMITED','positions_age_seconds':position_age,
         'gross_notional_hkd':gross if not unverified else None,
@@ -255,7 +260,7 @@ def portfolio(state, signals, epoch=None):
         'reconciliation':{'status':reconcile,'difference_hkd':difference,'tolerance_hkd':tolerance,
                           'note':'HKD估算与IG汇总核对；汇率、换汇费及采样时间可形成差异。'},
         'missing_stop_count':missing_stop,'known_loss_to_stop_hkd':known_stop,
-        'stop_risk_complete':not missing_stop and not unverified,
+        'stop_risk_complete':complete and not missing_stop,
         'margin_usage':account.get('margin')/eq if eq and eq>0 and num(account.get('margin')) is not None else None}
 
 

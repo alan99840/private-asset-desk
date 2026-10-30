@@ -464,6 +464,14 @@ class Monitor:
               **{k:p.get('marketData',{}).get(k) for k in ('epic','instrumentName','expiry')}} for p in out['orders']]
             at=timestamp(out['account_at']);age=(datetime.now(timezone.utc)-at).total_seconds() if at else None
             out['account_age_seconds']=age;out['stale']=age is None or age<0 or age>30
+            # ACCOUNT streaming does not confirm the current position/order book.
+            # Keep these clocks independent even when equity is still updating.
+            for component in ('positions','orders'):
+                component_at=timestamp(out.get(component+'_at'))
+                component_age=(datetime.now(timezone.utc)-component_at).total_seconds() if component_at else None
+                out[component+'_age_seconds']=component_age
+                out[component+'_stale']=(out.get(component) is None or component_age is None or
+                    not 0<=component_age<=90 or out.get('sync',{}).get(component,{}).get('status')!='ok')
             fat=timestamp(self.funding_at);funding_age=(datetime.now(timezone.utc)-fat).total_seconds() if fat else None
             out['funding']={'total_deposits':self.funding,'as_of':self.funding_at,
                 'since':self.creds.get('history_since') if self.creds else None,

@@ -20,6 +20,8 @@ def summarize(projections):
             'stream': state.get('stream'), 'risk': copy.deepcopy(state.get('risk', {})),
             'funding': copy.deepcopy(state.get('funding', {})),
             'positions_count': len(state['positions']) if state.get('positions') is not None else None,
+            'positions_stale': state.get('positions_stale', True), 'positions_at': state.get('positions_at'),
+            'orders_stale': state.get('orders_stale', True),
             'alerts': list(state.get('alerts', []))})
     totals = []
     for environment in ('live', 'demo'):
