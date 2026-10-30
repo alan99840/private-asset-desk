@@ -85,6 +85,39 @@ class QuantTests(unittest.TestCase):
   self.assertEqual(b['reconciliation']['status'],'CHECK_REQUIRED');self.assertIsNone(stress(state,b,signals,'points',1)['equity_hkd'])
   state['positions_at']=datetime.fromtimestamp(NOW-91,timezone.utc).isoformat()
   self.assertEqual(portfolio(state,signals,NOW)['status'],'DATA_LIMITED')
+ def test_stale_holdings_block_rows_reconciliation_and_stress_with_fresh_quotes(self):
+  signals={'X':{'atr14':2,'status':'READY'}}
+  cases=[{'positions_at':datetime.fromtimestamp(NOW-91,timezone.utc).isoformat()},
+         {'positions_at':datetime.fromtimestamp(NOW+1,timezone.utc).isoformat()},
+         {'positions_at':None}, {'positions_stale':True},
+         {'sync':{'positions':{'status':'retrying','error':'ig.network.or.tls.error'}}},
+         {'sync':{'positions':{}}},
+         {'sync':{'positions':None}},
+         {'positions_stale':False,'positions_at':datetime.fromtimestamp(NOW-91,timezone.utc).isoformat()}]
+  for changes in cases:
+   with self.subTest(changes=changes):
+    state=fixture();state.update(changes);book=portfolio(state,signals,NOW)
+    self.assertEqual(book['status'],'DATA_LIMITED')
+    self.assertEqual(book['positions'][0]['status'],'STALE');self.assertTrue(book['groups'][0]['stale'])
+    self.assertEqual(book['reconciliation']['status'],'STALE');self.assertFalse(book['stop_risk_complete'])
+    for mode in ['points','atr','percent','adverse']:
+     scenario=stress(state,book,signals,mode,1)
+     self.assertEqual(scenario['status'],'DATA_LIMITED');self.assertIsNone(scenario['equity_hkd'])
+     self.assertIsNone(scenario['delta_hkd']);self.assertEqual(scenario['rows'],[])
+ def test_fresh_verified_holdings_restore_estimates(self):
+  state=fixture();state.update(positions_stale=False,sync={'positions':{'status':'ok'}})
+  book=portfolio(state,{},NOW)
+  self.assertEqual(book['status'],'READY');self.assertEqual(book['positions'][0]['status'],'ESTIMATE')
+  self.assertFalse(book['groups'][0]['stale']);self.assertEqual(book['reconciliation']['status'],'WITHIN_TOLERANCE')
+  self.assertTrue(book['stop_risk_complete'])
+ def test_unverified_empty_holdings_do_not_claim_reconciled_flat_account(self):
+  state=fixture();state['positions']=[];state['account']['unrealized']=0
+  state['sync']={'positions':{'status':'retrying'}}
+  book=portfolio(state,{},NOW)
+  self.assertEqual(book['status'],'DATA_LIMITED');self.assertEqual(book['reconciliation']['status'],'STALE')
+  self.assertEqual(stress(state,book,{},'points',1)['status'],'DATA_LIMITED')
+  state['positions']=None
+  self.assertEqual(portfolio(state,{},NOW)['reconciliation']['status'],'INCOMPLETE')
  def test_crossed_quote_unknown_side_block(self):
   state=fixture();state['markets'][0]['ask']=99
   self.assertEqual(portfolio(state,{},NOW)['unverified_positions'],1)

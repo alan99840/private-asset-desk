@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from datetime import datetime,timezone,timedelta
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from ig_client import IGClient,IGError
@@ -11,6 +11,57 @@ from storage import Store
 from runtime import Monitor,number,amount,now
 
 class TransportTests(unittest.TestCase):
+ def response(self):
+  response=MagicMock();response.__enter__.return_value=response
+  response.headers={};response.read.return_value=b'{"accounts":[]}'
+  return response
+ def test_proxy_change_rebuilds_transport_preserves_session_and_tls(self):
+  import ssl
+  from urllib.request import ProxyHandler,HTTPSHandler
+  from ig_client import NoRedirect
+  old={'http':'http://127.0.0.1:7890','https':'http://127.0.0.1:7890'}
+  new={'http':'http://127.0.0.1:7897','https':'http://127.0.0.1:7897'}
+  before,after=MagicMock(),MagicMock();after.open.return_value=self.response()
+  with patch('ig_client.getproxies',side_effect=[old,new]),patch('ig_client.build_opener',side_effect=[before,after]) as build,patch('ig_client.time.sleep'):
+   client=IGClient({'environment':'demo','api_key':'synthetic'})
+   client.tokens={'CST':'synthetic-session','X-SECURITY-TOKEN':'synthetic-token'}
+   client.account_id='synthetic-account'
+   self.assertEqual(client.request('GET','/accounts'),{'accounts':[]})
+  before.open.assert_not_called();self.assertEqual(build.call_count,2)
+  handlers=build.call_args.args
+  proxy=next(h for h in handlers if isinstance(h,ProxyHandler))
+  https=next(h for h in handlers if isinstance(h,HTTPSHandler))
+  self.assertEqual(proxy.proxies,new);self.assertIs(https._context,client.tls_context)
+  self.assertEqual(https._context.verify_mode,ssl.CERT_REQUIRED);self.assertTrue(https._context.check_hostname)
+  self.assertTrue(any(isinstance(h,NoRedirect) for h in handlers))
+  self.assertEqual(client.account_id,'synthetic-account')
+  self.assertEqual(after.open.call_args.args[0].get_header('Cst'),'synthetic-session')
+ def test_unchanged_proxy_reuses_opener(self):
+  opener=MagicMock();opener.open.return_value=self.response()
+  with patch('ig_client.getproxies',return_value={'https':'http://127.0.0.1:7897'}),patch('ig_client.build_opener',return_value=opener) as build,patch('ig_client.time.sleep'):
+   client=IGClient({'environment':'demo','api_key':'synthetic'})
+   client.request('GET','/accounts');client.request('GET','/accounts')
+  self.assertEqual(build.call_count,1);self.assertEqual(opener.open.call_count,2)
+ def test_read_retry_picks_up_proxy_change(self):
+  from urllib.error import URLError
+  old={'https':'http://127.0.0.1:7890'};new={'https':'http://127.0.0.1:7897'}
+  before,after=MagicMock(),MagicMock()
+  before.open.side_effect=URLError('connection refused');after.open.return_value=self.response()
+  with patch('ig_client.getproxies',side_effect=[old,old,new]),patch('ig_client.build_opener',side_effect=[before,after]) as build,patch('ig_client.time.sleep'):
+   client=IGClient({'environment':'demo','api_key':'synthetic'})
+   self.assertEqual(client.request('GET','/accounts'),{'accounts':[]})
+  self.assertEqual(before.open.call_count,1);self.assertEqual(after.open.call_count,1)
+  self.assertEqual(build.call_count,2)
+ def test_unavailable_proxy_never_falls_back_or_retries_login(self):
+  from urllib.error import URLError
+  for method,path in [('GET','/accounts'),('POST','/session')]:
+   with self.subTest(method=method):
+    opener=MagicMock();opener.open.side_effect=URLError('connection refused')
+    with patch('ig_client.getproxies',return_value={'https':'http://127.0.0.1:7897'}),patch('ig_client.build_opener',return_value=opener) as build,patch('ig_client.time.sleep'):
+     client=IGClient({'environment':'demo','api_key':'synthetic'})
+     with self.assertRaises(IGError) as error:client.request(method,path)
+    self.assertEqual(error.exception.code,'ig.network.or.tls.error')
+    self.assertEqual(build.call_count,1);self.assertEqual(opener.open.call_count,3 if method=='GET' else 1)
  def test_no_dealing(self):
   for method,path in [('POST','/positions/otc'),('DELETE','/positions/otc'),('PUT','/workingorders/otc/x'),('POST','/workingorders/otc'),('DELETE','/workingorders/otc/x'),('GET','/working-orders'),('GET','https://evil.test/accounts'),('GET','//evil.test/accounts'),('GET','/../accounts'),('POST','/session?x=1')]:
    with self.assertRaises(IGError):IGClient.validate_path(method,path)

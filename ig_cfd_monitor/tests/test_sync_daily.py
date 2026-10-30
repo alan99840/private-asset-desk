@@ -39,6 +39,24 @@ class DailyTests(unittest.TestCase):
   finally:store.db.close()
 
 class IndependentSync(unittest.TestCase):
+ def test_live_equity_cannot_freshen_old_or_failed_holdings(self):
+  with patch('runtime.Store',lambda:Store(':memory:')):
+   m=Monitor()
+   try:
+    m.state.update(account_at=now(),positions=[],orders=[],positions_at=now(),orders_at=now(),
+      sync={'positions':{'status':'ok'},'orders':{'status':'ok'}})
+    self.assertFalse(m.project()['positions_stale'])
+    self.assertFalse(m.project()['orders_stale'])
+    for at in (None,(datetime.now(timezone.utc)-timedelta(days=4)).isoformat(),
+               (datetime.now(timezone.utc)+timedelta(minutes=1)).isoformat()):
+     m.state['positions_at']=at;out=m.project()
+     self.assertFalse(out['stale']);self.assertTrue(out['positions_stale'])
+     self.assertFalse(out['orders_stale']);self.assertEqual(out['positions'],[])
+    m.state['positions_at']=now();m.state['sync']['positions']['status']='retrying'
+    self.assertTrue(m.project()['positions_stale'])
+    m.state['sync']['positions']['status']='ok';m.state['positions']=None
+    self.assertTrue(m.project()['positions_stale'])
+   finally:m.store.db.close()
  def test_orders_failure_does_not_invalidate_good_equity(self):
   with patch('runtime.Store',lambda:Store(':memory:')),patch.object(Monitor,'status'):
    m=Monitor();m.scope='demo:a';m.creds={'history_since':'2026-01-01'};m.funding=30000;m.funding_at=now();m.client=MagicMock();m.client.account_id='a'
